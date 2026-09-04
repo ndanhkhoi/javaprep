@@ -4,7 +4,15 @@ import { build, files, prerendered, version } from '$service-worker';
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
 const CACHE = `javaprep-${version}`;
-const PRECACHE = [...build, ...files, ...prerendered];
+
+/**
+ * File đánh dấu bắt đầu bằng dấu chấm (`.nojekyll`) nằm trong `files` nhưng không phải
+ * tài nguyên phục vụ được — nhiều static server trả 404 cho chúng. Để lọt vào `addAll`
+ * thì **cả** lệnh cache thất bại, install fail và app mất hoàn toàn khả năng offline.
+ */
+const PRECACHE = [...build, ...files, ...prerendered].filter(
+	(path) => !path.split('/').pop()?.startsWith('.')
+);
 
 sw.addEventListener('install', (event) => {
 	event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)));

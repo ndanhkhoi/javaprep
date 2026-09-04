@@ -14,16 +14,19 @@
 {#if total === 0}
 	<p class="py-4 text-center text-xs text-ink-muted">Chưa có thẻ nào được lên lịch ôn.</p>
 {:else}
-	<div class="flex h-24 items-end gap-1" role="img" aria-label="Lịch ôn 14 ngày tới">
+	<div class="flex h-24 items-end gap-[3px]" role="img" aria-label="Lịch ôn 14 ngày tới">
 		{#each days as day, i (day.date)}
-			<div class="flex flex-1 flex-col items-center gap-1">
-				<span class="text-[9px] tabular-nums text-ink-muted">{day.count || ''}</span>
-				<div
-					class="w-full rounded-t-sm {i === 0 ? 'bg-warn' : 'bg-brand'}"
-					style="height: {Math.max(day.count === 0 ? 1 : 4, (day.count / max) * 64)}px"
-					title="{day.date}: {day.count} thẻ"
-				></div>
-				<span class="text-[9px] tabular-nums text-ink-muted">{dayLabel(day.date)}</span>
+			<div class="flex h-full flex-1 flex-col items-center gap-1">
+				<span class="h-3 text-[9px] leading-3 tabular-nums text-ink-muted">{day.count || ''}</span>
+				<!-- Track nền giữ cho trục 14 ngày luôn đọc được kể cả khi chưa có thẻ nào. -->
+				<div class="flex w-full flex-1 items-end rounded-sm bg-surface-3">
+					<div
+						class="w-full rounded-sm {i === 0 ? 'bg-warn' : 'bg-brand'}"
+						style="height: {day.count === 0 ? 0 : Math.max(8, (day.count / max) * 100)}%"
+						title="{day.date}: {day.count} thẻ"
+					></div>
+				</div>
+				<span class="text-[9px] leading-3 tabular-nums text-ink-muted">{dayLabel(day.date)}</span>
 			</div>
 		{/each}
 	</div>
