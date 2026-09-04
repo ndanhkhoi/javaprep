@@ -4,47 +4,209 @@
    không dùng media query trực tiếp — cho phép user override theme hệ thống. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-	--color-surface: oklch(99% 0.004 250);
-	--color-surface-2: oklch(96.5% 0.006 250);
-	--color-surface-3: oklch(93% 0.008 250);
-	--color-border: oklch(88% 0.01 250);
-	--color-ink: oklch(25% 0.02 255);
-	--color-ink-muted: oklch(52% 0.02 255);
-	--color-brand: oklch(52% 0.16 258);
-	--color-brand-ink: oklch(98% 0.01 258);
-	--color-ok: oklch(52% 0.14 155);
-	--color-warn: oklch(62% 0.15 70);
-	--color-bad: oklch(55% 0.19 25);
+/* ---------------------------------------------------------------------------
+   Font self-host.
+   Google Fonts qua CDN sẽ phá tính chất offline-first: lần mở đầu tiên không có
+   mạng là mất font, và mọi lần mở đều phụ thuộc một domain thứ ba. Ba file dưới
+   đây được Vite gắn hash nên service worker precache chúng cùng phần còn lại.
+   Chỉ lấy subset cần dùng: latin + vietnamese cho chữ, latin cho code (~99KB).
+   File nằm trong `src/` để Vite gắn hash và tự viết lại URL theo `paths.base`.
+--------------------------------------------------------------------------- */
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url('./lib/assets/fonts/inter-latin.woff2') format('woff2');
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+		U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+		U+FEFF, U+FFFD;
+}
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url('./lib/assets/fonts/inter-vietnamese.woff2') format('woff2');
+	unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1,
+		U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9,
+		U+20AB;
+}
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 100 800;
+	font-display: swap;
+	src: url('./lib/assets/fonts/jetbrains-mono-latin.woff2') format('woff2');
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+		U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+		U+FEFF, U+FFFD;
+}
 
-	--font-sans: 'Inter var', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-	--font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+@theme {
+	/* --- Bề mặt: thang 4 bậc + `elevated` cho phần tử nổi lên khỏi mặt phẳng --- */
+	--color-surface: oklch(99% 0.003 274);
+	--color-surface-2: oklch(97% 0.005 274);
+	--color-surface-3: oklch(94.2% 0.008 274);
+	--color-surface-4: oklch(91% 0.011 274);
+	--color-elevated: oklch(100% 0 0);
+	--color-border: oklch(90.5% 0.008 274);
+	--color-border-strong: oklch(83% 0.014 274);
+
+	/* --- Chữ: 3 bậc để không phải dùng opacity (opacity làm chữ mờ, không chỉ nhạt) --- */
+	--color-ink: oklch(24% 0.021 274);
+	--color-ink-muted: oklch(50% 0.018 274);
+	--color-ink-subtle: oklch(62% 0.015 274);
+
+	/* --- Brand --- */
+	--color-brand: oklch(52% 0.19 274);
+	--color-brand-hover: oklch(46% 0.2 274);
+	--color-brand-ink: oklch(99% 0.006 274);
+	--color-brand-soft: oklch(95.5% 0.035 274);
+	--color-brand-line: oklch(86% 0.07 274);
+
+	/* --- Accent phụ (dùng cho lớp thứ hai của gradient aurora) --- */
+	--color-aurora: oklch(58% 0.16 196);
+	--color-aurora-2: oklch(60% 0.19 322);
+
+	/* --- Trạng thái: `base` an toàn cho chữ, `soft` cho nền, `solid` cho khối đặc --- */
+	--color-ok: oklch(47% 0.135 152);
+	--color-ok-soft: oklch(94.5% 0.045 152);
+	--color-ok-solid: oklch(58% 0.16 152);
+	--color-warn: oklch(51% 0.125 62);
+	--color-warn-soft: oklch(95.5% 0.045 75);
+	--color-warn-solid: oklch(72% 0.16 75);
+	--color-bad: oklch(51% 0.19 22);
+	--color-bad-soft: oklch(95.5% 0.032 22);
+	--color-bad-solid: oklch(58% 0.2 22);
+
+	/* --- Chữ --- */
+	--font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+	--text-2xs: 0.6875rem;
+	--text-2xs--line-height: 1.35;
+
+	/* Thang display fluid: cùng một class cho mobile và desktop, không cần breakpoint. */
+	--text-display: clamp(1.75rem, 1.15rem + 2.6vw, 2.75rem);
+	--text-display--line-height: 1.06;
+	--text-display--letter-spacing: -0.028em;
+	--text-title: clamp(1.375rem, 1.1rem + 1.15vw, 1.875rem);
+	--text-title--line-height: 1.15;
+	--text-title--letter-spacing: -0.022em;
+	--text-heading: clamp(1.0625rem, 0.99rem + 0.45vw, 1.25rem);
+	--text-heading--line-height: 1.25;
+	--text-heading--letter-spacing: -0.014em;
+
+	/* --- Bo góc --- */
+	--radius-sm: 0.5rem;
+	--radius-md: 0.75rem;
+	--radius-lg: 1rem;
+	--radius-xl: 1.25rem;
+	--radius-2xl: 1.5rem;
+	--radius-3xl: 2rem;
+
+	/* --- Chiều sâu: nhiều lớp, blur lớn hơn offset -> bóng mềm chứ không "dán tem" --- */
+	--shadow-1: 0 1px 2px -1px oklch(24% 0.04 274 / 0.1), 0 1px 3px oklch(24% 0.04 274 / 0.06);
+	--shadow-2: 0 2px 4px -2px oklch(24% 0.04 274 / 0.1), 0 8px 20px -6px oklch(24% 0.04 274 / 0.14);
+	--shadow-3: 0 4px 8px -4px oklch(24% 0.04 274 / 0.12), 0 24px 48px -12px oklch(24% 0.04 274 / 0.2);
+	--shadow-glow: 0 8px 28px -10px oklch(52% 0.19 274 / 0.5);
+
+	/* --- Chuyển động --- */
+	--ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+	--ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+	--ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dark {
-	--color-surface: oklch(21% 0.02 258);
-	--color-surface-2: oklch(26% 0.022 258);
-	--color-surface-3: oklch(31% 0.024 258);
-	--color-border: oklch(38% 0.02 258);
-	--color-ink: oklch(95% 0.008 258);
-	--color-ink-muted: oklch(72% 0.015 258);
-	--color-brand: oklch(72% 0.14 258);
-	--color-brand-ink: oklch(20% 0.03 258);
-	--color-ok: oklch(72% 0.15 155);
-	--color-warn: oklch(78% 0.14 75);
-	--color-bad: oklch(70% 0.16 25);
+	--color-surface: oklch(17.5% 0.018 274);
+	--color-surface-2: oklch(21.5% 0.021 274);
+	--color-surface-3: oklch(25.5% 0.023 274);
+	--color-surface-4: oklch(30% 0.025 274);
+	--color-elevated: oklch(22.5% 0.022 274);
+	--color-border: oklch(31% 0.022 274);
+	--color-border-strong: oklch(41% 0.026 274);
+
+	--color-ink: oklch(96% 0.006 274);
+	--color-ink-muted: oklch(73% 0.014 274);
+	--color-ink-subtle: oklch(60% 0.016 274);
+
+	--color-brand: oklch(74% 0.155 274);
+	--color-brand-hover: oklch(80% 0.14 274);
+	--color-brand-ink: oklch(18% 0.035 274);
+	--color-brand-soft: oklch(27.5% 0.06 274);
+	--color-brand-line: oklch(38% 0.07 274);
+
+	--color-aurora: oklch(72% 0.13 196);
+	--color-aurora-2: oklch(74% 0.15 322);
+
+	--color-ok: oklch(79% 0.15 152);
+	--color-ok-soft: oklch(27% 0.06 152);
+	--color-ok-solid: oklch(70% 0.16 152);
+	--color-warn: oklch(83% 0.13 78);
+	--color-warn-soft: oklch(29% 0.05 70);
+	--color-warn-solid: oklch(77% 0.15 75);
+	--color-bad: oklch(75% 0.16 22);
+	--color-bad-soft: oklch(28.5% 0.07 22);
+	--color-bad-solid: oklch(62% 0.19 22);
+
+	/* Trong dark mode bóng đổ gần như vô hình. Chiều sâu chuyển sang dùng viền sáng
+	   ở cạnh trên (inner highlight) — đúng cách các OS tối dựng elevation. */
+	--shadow-1: 0 1px 2px oklch(0% 0 0 / 0.3);
+	--shadow-2: 0 2px 6px -2px oklch(0% 0 0 / 0.4), 0 10px 24px -8px oklch(0% 0 0 / 0.45);
+	--shadow-3: 0 4px 10px -4px oklch(0% 0 0 / 0.45), 0 28px 56px -16px oklch(0% 0 0 / 0.55);
+	--shadow-glow: 0 8px 30px -10px oklch(74% 0.155 274 / 0.4);
+}
+
+:root {
+	color-scheme: light;
+	/* Ba mốc thời lượng cho toàn bộ hệ chuyển động — không dùng số rời rạc ở component. */
+	--dur-fast: 140ms;
+	--dur: 220ms;
+	--dur-slow: 420ms;
+
+	/* Độ đậm của viền sáng nội bộ tạo cảm giác vật liệu có cạnh. */
+	--edge: oklch(100% 0 0 / 0.9);
+	--edge-strong: oklch(100% 0 0 / 1);
+}
+
+.dark {
+	color-scheme: dark;
+	--edge: oklch(100% 0 0 / 0.06);
+	--edge-strong: oklch(100% 0 0 / 0.1);
 }
 
 html {
 	background-color: var(--color-surface);
 	color: var(--color-ink);
 	-webkit-text-size-adjust: 100%;
+	scrollbar-gutter: stable;
 }
 
 body {
 	overflow-x: hidden;
 	overscroll-behavior-y: none;
 	font-family: var(--font-sans);
+	font-optical-sizing: auto;
+	font-variant-ligatures: contextual;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+}
+
+::selection {
+	background: var(--color-brand-soft);
+	color: var(--color-ink);
+}
+
+/* Tiêu đề tự cân dòng — tránh dòng cuối trơ một chữ. */
+h1,
+h2,
+h3 {
+	text-wrap: balance;
+}
+
+p {
+	text-wrap: pretty;
 }
 
 /* Vùng chạm tối thiểu theo WCAG 2.2 Target Size (Minimum). */
@@ -54,21 +216,10 @@ a[role='button'],
 	touch-action: manipulation;
 }
 
-@media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
-		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
-		transition-duration: 0.01ms !important;
-		scroll-behavior: auto !important;
-	}
-}
-
 :focus-visible {
 	outline: 2px solid var(--color-brand);
 	outline-offset: 2px;
-	border-radius: 0.25rem;
+	border-radius: 0.35rem;
 }
 
 /* Ẩn khỏi màn hình nhưng vẫn đọc được bởi screen reader. */
@@ -82,4 +233,195 @@ a[role='button'],
 	clip: rect(0, 0, 0, 0);
 	white-space: nowrap;
 	border-width: 0;
+}
+
+@layer components {
+	/* --- Vật liệu ------------------------------------------------------------ */
+
+	/** Mặt phẳng chuẩn cho card: nền nổi + viền + bóng nhẹ + cạnh sáng phía trên. */
+	.surface-card {
+		background-color: var(--color-elevated);
+		border: 1px solid var(--color-border);
+		box-shadow:
+			inset 0 1px 0 0 var(--edge),
+			var(--shadow-1);
+	}
+
+	/** Panel lớn hơn card, nằm cao hơn một bậc. */
+	.surface-panel {
+		background-color: var(--color-elevated);
+		border: 1px solid var(--color-border);
+		box-shadow:
+			inset 0 1px 0 0 var(--edge),
+			var(--shadow-2);
+	}
+
+	/** Chỉ dùng cho thanh nổi trên nội dung (nav, toast). Không dùng cho panel chứa
+	    chữ dài: backdrop-filter làm tương phản dao động theo nội dung phía sau. */
+	.surface-glass {
+		background-color: color-mix(in oklab, var(--color-surface) 78%, transparent);
+		backdrop-filter: blur(20px) saturate(180%);
+		-webkit-backdrop-filter: blur(20px) saturate(180%);
+		border-color: color-mix(in oklab, var(--color-border) 80%, transparent);
+	}
+
+	@supports not (backdrop-filter: blur(1px)) {
+		.surface-glass {
+			background-color: var(--color-surface);
+		}
+	}
+
+	/** Nền aurora: ba vệt sáng OKLCH mềm, dùng cho hero và khối nhấn.
+	    Vẽ bằng gradient nên không tốn thêm request nào.
+	    Tên KHÔNG được đặt là `bg-aurora`: Tailwind sinh utility trùng tên từ token
+	    `--color-aurora` và layer utilities luôn thắng layer components. */
+	.aurora-mesh {
+		background-image:
+			radial-gradient(
+				120% 100% at 8% -10%,
+				color-mix(in oklab, var(--color-brand) 26%, transparent),
+				transparent 60%
+			),
+			radial-gradient(
+				90% 90% at 100% 0%,
+				color-mix(in oklab, var(--color-aurora-2) 22%, transparent),
+				transparent 62%
+			),
+			radial-gradient(
+				110% 120% at 60% 120%,
+				color-mix(in oklab, var(--color-aurora) 20%, transparent),
+				transparent 65%
+			);
+	}
+
+	/** Chữ có markdown inline: `code` phải đọc được ở mọi cỡ chữ xung quanh, nên
+	    kích thước dùng `em` chứ không phải rem.
+	    Tên KHÔNG được đặt là `inline-md`: Tailwind sinh `inline-*` từ thang container
+	    nên `.inline-md` sẽ nhận `inline-size: 28rem`. */
+	.prose-inline {
+		overflow-wrap: anywhere;
+	}
+
+	.prose-inline code {
+		background: color-mix(in oklab, var(--color-surface-4) 70%, transparent);
+		border-radius: 0.3em;
+		padding: 0.08em 0.32em;
+		font-family: var(--font-mono);
+		font-size: 0.88em;
+		overflow-wrap: anywhere;
+	}
+
+	.prose-inline strong {
+		font-weight: 700;
+	}
+
+	/* --- Accent theo chủ đề --------------------------------------------------
+	   Mọi màu của một chủ đề dẫn xuất từ đúng một biến `--th` (góc hue). Thêm chủ
+	   đề mới chỉ cần thêm một số, không phải thêm bảng màu. */
+	.accent {
+		--accent: oklch(52% 0.165 var(--th, 274));
+		--accent-ink: oklch(99% 0.008 var(--th, 274));
+		--accent-soft: oklch(95.5% 0.042 var(--th, 274));
+		--accent-line: oklch(86% 0.075 var(--th, 274));
+		--accent-solid: oklch(60% 0.18 var(--th, 274));
+	}
+
+	.dark .accent {
+		--accent: oklch(78% 0.14 var(--th, 274));
+		--accent-ink: oklch(19% 0.04 var(--th, 274));
+		--accent-soft: oklch(24.5% 0.032 var(--th, 274));
+		--accent-line: oklch(38% 0.065 var(--th, 274));
+		--accent-solid: oklch(68% 0.16 var(--th, 274));
+	}
+
+	/* --- Chuyển động --------------------------------------------------------- */
+
+	/** Xuất hiện mềm khi phần tử được thêm vào DOM. `@starting-style` là CSS thuần,
+	    không cần thư viện animation nào. */
+	@supports (transition-behavior: allow-discrete) {
+		.animate-rise {
+			transition:
+				opacity var(--dur-slow, 420ms) var(--ease-out-quart),
+				translate var(--dur-slow, 420ms) var(--ease-out-quart);
+		}
+
+		@starting-style {
+			.animate-rise {
+				opacity: 0;
+				translate: 0 12px;
+			}
+		}
+	}
+
+	/** Bậc trễ cho hiệu ứng vào theo tầng — dùng ở lưới thẻ chủ đề. */
+	.stagger > * {
+		animation: rise-in var(--dur-slow, 420ms) var(--ease-out-quart) both;
+		animation-delay: calc(var(--i, 0) * 40ms);
+	}
+
+	@keyframes rise-in {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
+	}
+
+	@keyframes pop-in {
+		0% {
+			opacity: 0;
+			transform: scale(0.9);
+		}
+		60% {
+			opacity: 1;
+			transform: scale(1.02);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+
+	.animate-pop {
+		animation: pop-in 380ms var(--ease-spring) both;
+	}
+}
+
+/* Escape hatch của hệ thống chuyển động: một chỗ tắt tất cả, kể cả view transition. */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+
+	::view-transition-group(*),
+	::view-transition-old(*),
+	::view-transition-new(*) {
+		animation: none !important;
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	::view-transition-old(root) {
+		animation: vt-out 180ms var(--ease-soft) both;
+	}
+
+	::view-transition-new(root) {
+		animation: vt-in 260ms var(--ease-out-quart) both;
+	}
+
+	@keyframes vt-out {
+		to {
+			opacity: 0;
+		}
+	}
+
+	@keyframes vt-in {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+	}
 }
