@@ -23,8 +23,9 @@ Ngoài ra:
 - **Offline hoàn toàn** sau lần mở đầu tiên; cài được lên màn hình chính như một app.
 - **Badge số thẻ đến hạn** trên thanh điều hướng và trên icon app (nền tảng nào hỗ trợ).
 - **Ưu tiên chỗ yếu** — quiz tự đưa lại những câu bạn hay trả lời sai.
-- **Xuất / nhập tiến độ** dạng JSON để chuyển máy hoặc sao lưu.
-- **Dark mode**, tôn trọng `prefers-reduced-motion`, điều hướng được bằng bàn phím.
+- **Xuất / nhập tiến độ** dạng JSON để chuyển máy hoặc sao lưu; ghi đè và xoá đều hoàn tác được ngay sau đó.
+- **Bộ lọc và từ khoá nằm trong URL** — chia sẻ được một lần tìm, và nút back trả về đúng kết quả cũ.
+- **Dark mode**, tôn trọng `prefers-reduced-motion`, điều hướng được bằng bàn phím (vùng chạm 44px, tương phản đạt WCAG AA ở cả hai theme).
 - **Layout thích ứng** — dock nổi ở mobile/tablet, sidebar cố định và lưới bento từ 1024px.
 - **Thẻ lật 3D thật**, chuyển trang bằng View Transitions; tắt sạch khi user chọn giảm chuyển động.
 - **Font self-host** (Inter + JetBrains Mono, subset latin + vietnamese) — không gọi CDN nào, giữ nguyên tính offline-first.
@@ -52,7 +53,7 @@ Mỗi câu gồm: câu hỏi, đáp án ngắn (mặt sau flashcard), giải th�
 | Adapter | `@sveltejs/adapter-static` | 119 trang tĩnh, host được ở bất kỳ đâu |
 | Styling | Tailwind CSS v4 | Design token OKLCH qua `@theme`; hue của 11 chủ đề dẫn xuất từ một biến duy nhất |
 | Chữ | Inter + JetBrains Mono variable, self-host (~99KB) | Không phụ thuộc CDN nên offline vẫn đủ font; subset chỉ latin + vietnamese |
-| Icon | Bộ SVG tự vẽ trong `components/ui/icons.ts` | App cần ~25 icon; mọi package icon đều kéo theo cả bộ hàng nghìn glyph |
+| Icon | Bộ SVG tự vẽ trong `components/ui/icons.ts` | App cần ~40 icon (gồm icon nhận diện 11 chủ đề); mọi package icon đều kéo theo cả bộ hàng nghìn glyph |
 | Offline | Service worker tự viết (`$service-worker`) | Không thêm dependency; SvelteKit đã cung cấp danh sách asset và `version` |
 | Lưu trữ | `localStorage` có versioning | ~15KB state cho 100 thẻ; IndexedDB là over-engineering ở quy mô này |
 | Kiểm tra dữ liệu | Zod | Dùng chung cho validator nội dung và validate file sao lưu khi import |

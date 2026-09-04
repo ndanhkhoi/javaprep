@@ -94,7 +94,7 @@ Toàn bộ màu khai báo bằng OKLCH. Lý do thực dụng chứ không phải
 
 Điều đó dẫn tới cách làm accent cho 11 chủ đề: mỗi chủ đề chỉ khai báo **một con số hue** trong `src/lib/theme/topic-accent.ts`, còn class `.accent` trong `app.css` dẫn xuất cả bộ (`--accent`, `--accent-soft`, `--accent-line`, `--accent-solid`) từ nó với L và C cố định. Thêm chủ đề mới là thêm một số, không phải thêm bảng màu và không phải kiểm tra lại tương phản.
 
-Trạng thái (`ok`/`warn`/`bad`) có ba biến thể: bản gốc đủ tương phản để làm **màu chữ**, `-soft` để làm **nền**, `-solid` để làm **khối đặc**. Trước đây chỉ có một biến thể nên `text-warn` ở light mode chỉ đạt ~3:1.
+Trạng thái (`ok`/`warn`/`bad`) có bốn vai trò: bản gốc đủ tương phản để làm **màu chữ**, `-soft` để làm **nền nhạt**, `-ink` cho **chữ nằm trên bản gốc**, `-solid` cho **khối đồ hoạ**. Trước đây chỉ có một biến thể nên `text-warn` ở light mode chỉ đạt ~3:1.
 
 ## Tên class tự viết không được trùng namespace utility của Tailwind
 
@@ -150,3 +150,51 @@ Chỗ chỉ nhận chữ thuần — thẻ `<title>`, `aria-label` — dùng `st
 Trong dark mode bóng đổ gần như vô hình. Vì thế `.dark` định nghĩa lại thang bóng đậm hơn **và** `--edge` (viền sáng nội bộ ở cạnh trên, `inset 0 1px 0`) chuyển từ trắng đục sang trắng 6% — đúng cách các hệ điều hành tối dựng elevation.
 
 `backdrop-filter` chỉ dùng ở thanh nổi trên nội dung (dock, top bar, toast). Không dùng cho panel chứa chữ dài: tương phản chữ sẽ dao động theo nội dung phía sau, và có kèm fallback `@supports not (backdrop-filter: …)` sang nền đặc.
+
+## Chữ không bao giờ đặt lên biến thể `-solid`
+
+Badge số thẻ đến hạn và chip A–D của quiz từng là `text-white` trên `-solid`. Tính ra thì trắng trên `ok-solid` chỉ đạt 3.96:1 ở light mode, còn ở dark mode 2.50:1 — dưới ngưỡng 4.5:1 cho chữ nhỏ. Đen cũng không cứu được: ở tông giữa (L ≈ 58–70%) **không màu chữ nào** đủ tương phản với một khối bão hoà.
+
+Cách xử lý: khối đặc có chữ dùng cặp `--color-<state>` + `--color-<state>-ink` (giống cặp `brand`/`brand-ink` đã có) — bản gốc vốn là màu tối ở light mode và màu sáng ở dark mode, nên luôn có một `ink` đối lập đủ xa. `-solid` chỉ còn dùng cho cột biểu đồ, vòng tiến độ, đoạn bar và ô heatmap, nơi ngưỡng là 3:1 với nền chứ không phải 4.5:1.
+
+Trong cùng lần kiểm này, `warn-solid` ở light mode bị hạ độ sáng (72% → 63%): amber sáng chỉ đạt 2.14:1 với track `surface-3`, tức là cột "hôm nay" của biểu đồ dự báo và vòng tiến độ phiên ôn gần như không phân biệt được với nền. `ink-subtle` cũng bị hạ (62% → 54% light, 60% → 64% dark) vì 3.54:1 không đủ cho chữ 12px.
+
+## Icon nhận diện chủ đề là SVG, không phải emoji trong dữ liệu
+
+11 chủ đề trước đây mang một emoji trong `topics.json` (☕, 🧵, 🌱…). Emoji do font hệ thống vẽ: Windows, Android và macOS ra ba hình khác nhau, không nhận `currentColor` nên không đi theo hue của chủ đề, và độ dày nét không ăn nhập với 30 icon stroke còn lại.
+
+Icon chuyển sang `src/lib/theme/topic-icon.ts` — cùng tầng với hue, vì "chủ đề trông ra sao" là quyết định trình bày, không phải nội dung. `topics.json` mất trường `icon`, `Topic` mất một field, và icon chủ đề giờ nhận màu accent như mọi icon khác.
+
+Cùng lý do, emoji ở màn hình kết quả (🎉, 🏆, 👍, 📚) đổi sang icon `trophy`/`target`/`book`.
+
+## Phạm vi và từ khoá nằm trong URL
+
+Trang chủ đề có nút "Ôn chủ đề này" trỏ tới `/study?topic=<id>`, nhưng `/study` không đọc tham số đó — bấm vào là mở phiên ôn **toàn bộ** chủ đề khác, đúng thứ người dùng vừa nói là không muốn.
+
+Giờ `/study`, `/quiz` và `/search` đọc trạng thái ban đầu từ query string và ghi lại bằng `replaceState` (không thêm entry vào history). Ba hệ quả: link chia sẻ được, nút back từ trang câu hỏi trả về đúng kết quả tìm kiếm cũ, và trang chủ đề nối được sang phiên ôn có phạm vi.
+
+Bẫy gặp khi làm: `Number(searchParams.get('count'))` trả về 0 khi tham số không tồn tại, mà 0 lại là giá trị hợp lệ ("tất cả câu") — nên phải kiểm `=== null` trước khi đổi kiểu.
+
+## Hành động không hoàn tác được thì cho hoàn tác, thay vì hỏi hai lần
+
+Xoá tiến độ trước đây gọi `confirm()` hai lần liên tiếp. Hai hộp thoại nối nhau không làm người dùng đọc kỹ hơn — nó dạy người ta bấm OK hai lần. Và hộp thoại của trình duyệt không nói được hậu quả cụ thể bằng ngôn ngữ của app.
+
+Thay bằng một `ConfirmDialog` dùng `<dialog>` của nền tảng (bẫy focus, `Esc`, `::backdrop` đều có sẵn) nói rõ số thẻ sẽ mất, cộng với **hoàn tác**: xoá và ghi đè đều chụp `progress.snapshot()` trước khi ghi, rồi hiện nút "Hoàn tác" trong thông báo. Ảnh chụp nằm trong bộ nhớ nên chỉ sống tới khi rời trang — đúng khoảng thời gian người dùng còn nhớ mình vừa làm gì.
+
+## SegmentedControl là radio group, chỉ chiếm một điểm dừng Tab
+
+Ba lựa chọn giao diện và bốn mức giới hạn thẻ mới là loại trừ nhau, nên ngữ nghĩa đúng là `radiogroup`/`radio` với `aria-checked`, không phải nhóm nút bấm với `aria-pressed`. Kèm theo đó là hành vi bàn phím của pattern này: cả nhóm một điểm dừng Tab, di chuyển giữa các lựa chọn bằng phím mũi tên (và `Home`/`End`).
+
+Khác biệt thực tế: người dùng bàn phím trên trang Cài đặt đi qua 7 điểm dừng thay vì 7 lần Tab cho từng ô.
+
+## Lật thẻ kéo theo cả điểm focus
+
+Người dùng screen reader bấm "Hiện đáp án" rồi vẫn đứng trên chính nút đó — nút vừa bị `aria-hidden` che, nên họ không được đọc gì và mặt sau coi như không tồn tại.
+
+`Flashcard` chuyển focus sang mặt đang hiện (`tabindex="-1"` trên mặt sau) mỗi khi lật, nhưng chỉ khi focus đang nằm trong thẻ hoặc chưa ở đâu cả — kéo focus về từ một chỗ khác là cướp quyền điều khiển.
+
+## Vùng chạm 44px và cỡ chữ nhỏ nhất 12px
+
+Trước đây nhiều phần tử bấm được cao 32–40px (nút theme, link "‹ Chủ đề", chip lọc, nút chép code) và nhiều nhãn nhỏ tới 10px. WCAG 2.2 chỉ đòi 24px, nhưng ngón tay không đọc spec — Apple HIG và Material đều lấy 44/48.
+
+Chuẩn hiện tại: phần tử bấm được `min-h-11` (44px) ở màn cảm ứng, gọn lại 40px từ `sm`; link chữ nhỏ mở rộng vùng chạm bằng `min-h-11 -ms-2 px-2` để khoảng cách nhìn thấy không đổi. `--text-2xs` lên 12px và mọi cỡ chữ nhỏ hơn bị bỏ, trừ nhãn trục của heatmap (10px) — chỗ đó đã có mô tả cho screen reader nên chữ chỉ còn vai trò định vị.

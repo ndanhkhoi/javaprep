@@ -41,12 +41,13 @@ Nếu đổi **số lượng** câu trong một chủ đề, cập nhật bảng
 
 ## Thêm chủ đề mới
 
-1. Thêm một mục vào `src/lib/data/topics.json` (`id` kebab-case, `icon` là emoji, `blurb` một dòng, `order` chưa bị dùng).
+1. Thêm một mục vào `src/lib/data/topics.json` (`id` kebab-case, `blurb` một dòng, `order` chưa bị dùng).
 2. Tạo `src/lib/data/topics/<id>.json`.
 3. Import và nối vào mảng trong `src/lib/data/authored.ts`.
 4. Thêm một góc hue vào `HUE_BY_TOPIC` trong `src/lib/theme/topic-accent.ts` — chọn số cách các hue đang có tối thiểu ~25 độ. Bỏ bước này thì chủ đề vẫn hiển thị đúng, chỉ dùng màu brand mặc định.
-5. Thêm số lượng câu vào `EXPECTED_PER_TOPIC` trong `scripts/validate-content.ts`.
-6. `npm run validate:content && npm run verify`.
+5. Thêm một icon vào `ICON_BY_TOPIC` trong `src/lib/theme/topic-icon.ts` (tên lấy từ `icons.ts`). Bỏ bước này thì chủ đề dùng icon `book` mặc định.
+6. Thêm số lượng câu vào `EXPECTED_PER_TOPIC` trong `scripts/validate-content.ts`.
+7. `npm run validate:content && npm run verify`.
 
 Trang topic và trang chi tiết tự sinh từ dữ liệu — không cần thêm route.
 
@@ -60,10 +61,11 @@ Tất cả nằm trong `src/app.css`. Không hardcode màu, bo góc, bóng hay t
 |---|---|---|
 | Bề mặt | `--color-surface`, `-2`, `-3`, `-4`, `--color-elevated` | Thang 4 bậc; `elevated` cho phần tử nổi khỏi mặt phẳng |
 | Chữ | `--color-ink`, `--color-ink-muted`, `--color-ink-subtle` | Ba bậc, để không phải hạ opacity (opacity làm chữ mờ, không chỉ nhạt) |
-| Trạng thái | `--color-ok/warn/bad` + `-soft` + `-solid` | Bản gốc an toàn cho **chữ**, `-soft` cho **nền**, `-solid` cho **khối đặc** |
+| Trạng thái | `--color-ok/warn/bad` + `-soft` + `-ink` + `-solid` | Bản gốc an toàn cho **chữ**, `-soft` cho **nền nhạt**, `-ink` cho **chữ nằm trên bản gốc** (badge, chip đặc), `-solid` cho **khối đồ hoạ** (cột, vòng, đoạn bar). Không đặt chữ lên `-solid` |
 | Chiều sâu | `--shadow-1..3`, `--shadow-glow`, `--edge` | `.dark` định nghĩa lại cả thang bóng và `--edge` |
 | Bo góc | `--radius-sm..3xl` | `xl` cho card, `2xl` cho panel lớn |
-| Cỡ chữ | `--text-2xs`, `--text-heading/title/display` | Ba cỡ lớn dùng `clamp()` nên không cần breakpoint |
+| Cỡ chữ | `--text-2xs`, `--text-heading/title/display` | `2xs` là 12px — bậc nhỏ nhất được dùng cho chữ; ba cỡ lớn dùng `clamp()` nên không cần breakpoint |
+| Nhãn eyebrow | `--tracking-eyebrow` + class `.eyebrow` | Nhãn in hoa mở đầu khối; chỉ truyền màu từ ngoài |
 | Chuyển động | `--dur-fast/--dur/--dur-slow`, `--ease-out-quart/spring/soft` | Mọi transition dùng ba mốc này |
 
 Mỗi giá trị trong `@theme` phải được định nghĩa lại trong khối `.dark` nếu dark mode cần khác.
@@ -77,6 +79,12 @@ Cách kiểm tra sau khi thêm một class vào `@layer components`: chạy `npm
 ### Thêm icon
 
 `src/lib/components/ui/icons.ts` là một map `tên → path`, vẽ trên khung `24x24`, chỉ dùng stroke (`fill="none"`) và không đặt `stroke-width` riêng — `Icon.svelte` truyền giá trị đó vào. Thêm một entry là dùng được ngay kèm type-safety, vì `IconName` suy ra từ chính map đó.
+
+Không dùng emoji làm icon giao diện: emoji do font hệ thống vẽ nên mỗi nền tảng ra một hình khác nhau, không nhận `currentColor` và không cùng độ dày nét với bộ icon còn lại. Icon nhận diện chủ đề vì thế nằm ở `topic-icon.ts` chứ không nằm trong dữ liệu.
+
+### Vùng chạm và cỡ chữ
+
+Phần tử bấm được cao tối thiểu 44px ở màn hình cảm ứng (`min-h-11`), có thể gọn lại 40px từ `sm` trở lên. Link chữ nhỏ dùng `min-h-11` cộng `-ms-2 px-2` để mở rộng vùng chạm mà không đổi khoảng cách nhìn thấy. Chữ không dùng cỡ nhỏ hơn `text-2xs` (12px); các nhãn trục biểu đồ là ngoại lệ duy nhất vì chúng đã có bảng số liệu cho screen reader.
 
 ### Sinh lại icon app
 
