@@ -1,0 +1,79 @@
+[
+	{
+		"id": "java-core",
+		"name": "Java Core & OOP",
+		"icon": "☕",
+		"blurb": "Kiểu dữ liệu, kế thừa, đa hình, equals/hashCode, immutability",
+		"order": 1
+	},
+	{
+		"id": "collections",
+		"name": "Collections Framework",
+		"icon": "🗂️",
+		"blurb": "List, Set, Map, độ phức tạp, fail-fast, cấu trúc bên trong HashMap",
+		"order": 2
+	},
+	{
+		"id": "concurrency",
+		"name": "Concurrency & Multithreading",
+		"icon": "🧵",
+		"blurb": "Thread, synchronized, volatile, executor, deadlock, virtual thread",
+		"order": 3
+	},
+	{
+		"id": "jvm-memory",
+		"name": "JVM, Memory & GC",
+		"icon": "🧠",
+		"blurb": "Class loading, heap/stack, garbage collector, memory leak, JIT",
+		"order": 4
+	},
+	{
+		"id": "exceptions",
+		"name": "Exception Handling",
+		"icon": "🚨",
+		"blurb": "Checked vs unchecked, try-with-resources, finally, custom exception",
+		"order": 5
+	},
+	{
+		"id": "java8-plus",
+		"name": "Java 8+ Modern",
+		"icon": "🚀",
+		"blurb": "Lambda, Stream, Optional, record, sealed, pattern matching",
+		"order": 6
+	},
+	{
+		"id": "spring-core",
+		"name": "Spring Core",
+		"icon": "🌱",
+		"blurb": "IoC, DI, bean scope, lifecycle, AOP, proxy, circular dependency",
+		"order": 7
+	},
+	{
+		"id": "spring-boot",
+		"name": "Spring Boot",
+		"icon": "🥾",
+		"blurb": "Auto-configuration, starter, profile, config properties, Actuator",
+		"order": 8
+	},
+	{
+		"id": "spring-web",
+		"name": "Spring MVC & REST",
+		"icon": "🌐",
+		"blurb": "DispatcherServlet, controller, validation, exception handler, WebFlux",
+		"order": 9
+	},
+	{
+		"id": "spring-data",
+		"name": "Spring Data JPA & Hibernate",
+		"icon": "🗄️",
+		"blurb": "Entity lifecycle, lazy loading, N+1, @Transactional, khoá lạc quan",
+		"order": 10
+	},
+	{
+		"id": "spring-security",
+		"name": "Spring Security",
+		"icon": "🔐",
+		"blurb": "Filter chain, authentication, authorization, JWT, CSRF",
+		"order": 11
+	}
+]

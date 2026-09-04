@@ -1,0 +1,162 @@
+[
+	{
+		"id": "spring-web-001",
+		"topic": "spring-web",
+		"difficulty": "medium",
+		"question": "`DispatcherServlet` xử lý một HTTP request qua những bước nào?",
+		"answerShort": "Request → `HandlerMapping` tìm handler → `HandlerAdapter` gọi controller (qua chuỗi interceptor) → trả `ModelAndView` hoặc giá trị đã được `HttpMessageConverter` chuyển đổi → `ViewResolver` (nếu có view) → response.",
+		"answerLong": "**`DispatcherServlet` là front controller** — mọi request đi qua đúng một điểm vào.\n\n**Các bước**:\n\n1. Servlet container chuyển request tới `DispatcherServlet`.\n2. `HandlerMapping` tìm handler khớp. `RequestMappingHandlerMapping` khớp theo `@RequestMapping`/`@GetMapping`, dựa trên path, method, header, params, content type.\n3. Dựng `HandlerExecutionChain` gồm handler và các `HandlerInterceptor`.\n4. `preHandle()` của từng interceptor chạy theo thứ tự.\n5. `HandlerAdapter` gọi method controller. Trước đó, các `HandlerMethodArgumentResolver` phân giải tham số (`@RequestBody`, `@PathVariable`, `@RequestParam`, `Principal`...).\n6. Với `@RestController` hoặc `@ResponseBody`: `HttpMessageConverter` (thường là Jackson) tuần tự hoá giá trị trả về theo content negotiation. Không có `@ResponseBody` thì đi tiếp qua `ViewResolver`.\n7. `postHandle()`, render, rồi `afterCompletion()` (luôn chạy, kể cả khi có exception).\n8. Exception được `HandlerExceptionResolver` xử lý — `@ExceptionHandler` và `@ControllerAdvice` hoạt động ở tầng này.\n\n**Interceptor khác Filter thế nào**: `Filter` thuộc đặc tả Servlet, chạy **ngoài** Spring MVC nên không biết handler nào sẽ xử lý. `HandlerInterceptor` là của Spring, chạy **bên trong** `DispatcherServlet` nên biết handler và có thể đọc annotation của nó. Dùng filter cho việc thuộc tầng HTTP (CORS, nén, logging thô); dùng interceptor khi cần biết ngữ cảnh handler.\n\n**Content negotiation**: quyết định theo header `Accept`, có thể cấu hình thêm theo đuôi đường dẫn hoặc query param.",
+		"code": "@RestController\n@RequestMapping(\"/api/users\")\nclass UserController {\n    @GetMapping(\"/{id}\")\n    ResponseEntity<UserDto> get(@PathVariable long id) {\n        return service.find(id).map(ResponseEntity::ok)\n                               .orElse(ResponseEntity.notFound().build());\n    }\n}\n\n@Component\nclass TimingInterceptor implements HandlerInterceptor {\n    public boolean preHandle(HttpServletRequest r, HttpServletResponse s, Object handler) {\n        r.setAttribute(\"t0\", System.nanoTime());\n        return true;   // false -> dừng chuỗi, không gọi controller\n    }\n}",
+		"tags": ["dispatcherservlet", "handlermapping", "interceptor", "message-converter"],
+		"quiz": {
+			"options": [
+				"`Filter` chạy bên trong `DispatcherServlet` và biết được handler nào sẽ xử lý request",
+				"`HandlerInterceptor` chạy bên trong `DispatcherServlet` nên biết handler, còn `Filter` thuộc tầng Servlet ở ngoài",
+				"`@RestController` vẫn phải đi qua `ViewResolver` để render kết quả",
+				"`afterCompletion()` không được gọi khi controller ném exception"
+			],
+			"correct": 1,
+			"explanation": "Filter thuộc đặc tả Servlet, chạy trước và sau `DispatcherServlet`. `@ResponseBody` bỏ qua `ViewResolver`, và `afterCompletion` luôn chạy — kể cả khi có exception."
+		}
+	},
+	{
+		"id": "spring-web-002",
+		"topic": "spring-web",
+		"difficulty": "medium",
+		"question": "Xử lý exception trong REST API bằng Spring thế nào cho đúng?",
+		"answerShort": "`@RestControllerAdvice` cùng `@ExceptionHandler` gom việc xử lý lỗi về một chỗ. Nên trả về `ProblemDetail` (RFC 9457) — chuẩn đã được Spring 6 hỗ trợ sẵn — thay vì tự chế cấu trúc lỗi riêng.",
+		"answerLong": "**Các tầng xử lý**:\n\n1. `@ExceptionHandler` **trong** controller — chỉ áp dụng cho controller đó.\n2. `@RestControllerAdvice` — toàn cục, hoặc giới hạn theo package/annotation/class. Đây là cách nên dùng.\n3. `ResponseEntityExceptionHandler` — class cha có sẵn, đã xử lý các exception chuẩn của Spring MVC (`MethodArgumentNotValidException`, `HttpMessageNotReadableException`...). Kế thừa nó để không phải viết lại.\n4. `ErrorController` — chốt chặn cuối cho lỗi ngoài phạm vi MVC.\n\n**`ProblemDetail` (RFC 9457, trước là RFC 7807)** — Spring 6 hỗ trợ sẵn. Định dạng chuẩn với `type`, `title`, `status`, `detail`, `instance` và thuộc tính mở rộng tuỳ ý. Bật bằng `spring.mvc.problemdetails.enabled=true` để Spring tự dùng nó cho các lỗi tích hợp sẵn.\n\n**Bốn nguyên tắc**:\n\n1. **Không rò rỉ chi tiết nội bộ** — stack trace, câu SQL, tên class là thông tin phục vụ tấn công. Log đầy đủ ở phía server, trả cho client thông điệp tối giản.\n2. **Kèm mã lỗi ổn định** để client xử lý theo chương trình, thay vì phải so khớp chuỗi thông báo.\n3. **HTTP status đúng ngữ nghĩa**: 400 sai định dạng, 401 chưa xác thực, 403 không đủ quyền, 404 không tồn tại, 409 xung đột trạng thái, 422 đúng cú pháp nhưng sai nghiệp vụ, 429 quá giới hạn.\n4. **Gắn trace id** vào mọi response lỗi — nó là cầu nối giữa báo cáo của người dùng và log.\n\n**Với validation**: `@Valid` thất bại ném `MethodArgumentNotValidException`, chứa `BindingResult` với danh sách lỗi từng field. Nên gom thành mảng lỗi có cấu trúc, không nối thành một chuỗi.",
+		"code": "@RestControllerAdvice\nclass GlobalExceptionHandler extends ResponseEntityExceptionHandler {\n\n    @ExceptionHandler(EntityNotFoundException.class)\n    ProblemDetail onNotFound(EntityNotFoundException e) {\n        var pd = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());\n        pd.setType(URI.create(\"https://api.example.com/errors/not-found\"));\n        pd.setProperty(\"traceId\", MDC.get(\"traceId\"));\n        return pd;\n    }\n\n    @ExceptionHandler(Exception.class)\n    ProblemDetail onUnexpected(Exception e) {\n        log.error(\"Lỗi không lường trước\", e);   // chi tiết chỉ nằm ở log\n        return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, \"Lỗi hệ thống\");\n    }\n}",
+		"tags": ["exception-handling", "controlleradvice", "problemdetail", "rfc9457"],
+		"quiz": {
+			"options": [
+				"Nên trả stack trace về client để họ tự chẩn đoán lỗi",
+				"`@RestControllerAdvice` chỉ áp dụng được cho một controller duy nhất",
+				"`ProblemDetail` theo RFC 9457 là định dạng lỗi chuẩn được Spring 6 hỗ trợ sẵn",
+				"Mọi lỗi nghiệp vụ đều nên trả về HTTP 500"
+			],
+			"correct": 2,
+			"explanation": "Stack trace là thông tin hỗ trợ tấn công. `@RestControllerAdvice` mặc định là toàn cục, và HTTP status nên phản ánh đúng bản chất lỗi (400/404/409/422)."
+		}
+	},
+	{
+		"id": "spring-web-003",
+		"topic": "spring-web",
+		"difficulty": "easy",
+		"question": "Validation trong Spring hoạt động thế nào? `@Valid` khác `@Validated` ra sao?",
+		"answerShort": "`@Valid` là chuẩn Jakarta Bean Validation, dùng cho tham số controller và lồng nhau. `@Validated` là của Spring — hỗ trợ thêm **validation group** và bật validate cho tham số method ở bất kỳ bean nào.",
+		"answerLong": "**Bean Validation (Jakarta Validation, cài đặt bởi Hibernate Validator)** cung cấp các annotation ràng buộc: `@NotNull`, `@NotBlank` (chuỗi không rỗng sau khi trim), `@NotEmpty`, `@Size`, `@Min`/`@Max`, `@Email`, `@Pattern`, `@Past`/`@Future`, `@Positive`.\n\n**Khác biệt**:\n\n| | `@Valid` | `@Validated` |\n|---|---|---|\n| Nguồn gốc | Jakarta | Spring |\n| Validation group | không | **có** |\n| Vị trí đặt | tham số, field | class (bật method validation), tham số |\n| Lồng nhau | có (trên field) | không trực tiếp |\n\n**Validation group** — cùng một DTO nhưng ràng buộc khác nhau tuỳ ngữ cảnh: lúc tạo mới thì `id` phải null, lúc cập nhật thì `id` bắt buộc. Chỉ `@Validated` làm được.\n\n**Method validation**: đánh `@Validated` lên **class** để validate cả tham số và giá trị trả về của mọi method. Lỗi ném `ConstraintViolationException` (khác với `MethodArgumentNotValidException` của tầng controller) nên `@RestControllerAdvice` phải xử lý cả hai.\n\n**Ba lưu ý**:\n\n1. **Validation lồng nhau cần `@Valid` trên field**, không tự động lan xuống object con.\n2. `@NotNull` không kiểm chuỗi rỗng; `@NotBlank` mới loại được chuỗi toàn khoảng trắng.\n3. **Validate ở tầng nào**: DTO ở biên (cú pháp, định dạng) và domain ở lõi (quy tắc nghiệp vụ). Chỉ dựa vào annotation là không đủ cho các bất biến nghiệp vụ thật sự.\n\n**Custom constraint**: viết annotation cùng một `ConstraintValidator` — cách sạch để đóng gói quy tắc dùng lại nhiều nơi (mã số thuế, số điện thoại theo định dạng nội địa).",
+		"code": "public record CreateOrder(\n    @NotBlank(message = \"Mã khách hàng là bắt buộc\") String customerId,\n    @NotEmpty @Valid List<OrderLine> lines,      // @Valid để validate cả phần tử bên trong\n    @Positive BigDecimal total\n) {}\n\n@RestController\nclass OrderController {\n    @PostMapping(\"/orders\")\n    ResponseEntity<?> create(@Valid @RequestBody CreateOrder req) { ... }\n}\n\n@Service @Validated   // bật method validation cho cả class\nclass PricingService {\n    BigDecimal price(@Min(1) int quantity) { ... }   // ném ConstraintViolationException\n}",
+		"tags": ["validation", "valid", "validated", "bean-validation"],
+		"quiz": {
+			"options": [
+				"`@Validated` hỗ trợ validation group và bật method validation, còn `@Valid` là annotation chuẩn của Jakarta",
+				"`@NotNull` cũng loại bỏ được chuỗi rỗng và chuỗi toàn khoảng trắng",
+				"Validation tự động lan xuống mọi object lồng bên trong mà không cần khai báo gì",
+				"Lỗi validation ở controller và ở method đều ném cùng một loại exception"
+			],
+			"correct": 0,
+			"explanation": "`@NotBlank` mới loại chuỗi trắng; object lồng nhau cần `@Valid` trên field; và hai tầng ném hai exception khác nhau (`MethodArgumentNotValidException` và `ConstraintViolationException`)."
+		}
+	},
+	{
+		"id": "spring-web-004",
+		"topic": "spring-web",
+		"difficulty": "hard",
+		"question": "Spring MVC và WebFlux khác nhau thế nào? Khi nào nên chọn WebFlux?",
+		"answerShort": "MVC là servlet chặn, mỗi request một thread. WebFlux là reactive không chặn, ít thread xử lý nhiều kết nối. Từ Java 21, virtual thread giúp MVC scale gần bằng WebFlux mà không cần đổi mô hình lập trình.",
+		"answerLong": "| | Spring MVC | WebFlux |\n|---|---|---|\n| Mô hình | thread-per-request, chặn | event loop, không chặn |\n| Server | Tomcat, Jetty, Undertow | Netty (mặc định), hoặc servlet 3.1+ |\n| Kiểu trả về | `T`, `ResponseEntity<T>` | `Mono<T>`, `Flux<T>` |\n| Truy cập DB | JDBC (chặn) | R2DBC |\n| Debug | stack trace bình thường | stack trace reactive rất khó đọc |\n| Backpressure | không | có |\n\n**WebFlux có lợi khi**:\n\n- Rất nhiều kết nối đồng thời, phần lớn thời gian là chờ I/O (API gateway, proxy, dịch vụ gọi nhiều dịch vụ khác).\n- Streaming (server-sent events, WebSocket, tải file lớn).\n- Cần backpressure thật sự — bên tiêu thụ điều tiết được tốc độ bên sản xuất.\n\n**WebFlux KHÔNG có lợi khi**:\n\n- Toàn bộ luồng vẫn phải gọi JDBC. Một lời gọi chặn trong event loop làm nghẽn toàn bộ server — tệ hơn nhiều so với MVC.\n- Tác vụ nặng CPU.\n- Đội chưa quen reactive: đường cong học rất dốc, debug khó, và một lỗi chặn nhầm rất khó phát hiện.\n\n**Thay đổi lớn từ Java 21 + Spring Boot 3.2**: bật `spring.threads.virtual.enabled=true` cho MVC là mỗi request chạy trên một virtual thread. Thread chặn ở I/O sẽ unmount, nên đạt được phần lớn khả năng scale của WebFlux **mà vẫn giữ code đồng bộ dễ đọc và stack trace bình thường**. Với đa số ứng dụng CRUD, đây giờ là lựa chọn mặc định hợp lý hơn WebFlux.\n\n**Vẫn nên dùng WebFlux khi** cần backpressure hoặc streaming thực thụ — virtual thread không cung cấp hai thứ này.",
+		"code": "// MVC + virtual thread (Boot 3.2+, Java 21): code đồng bộ nhưng scale tốt\nspring.threads.virtual.enabled: true\n\n@GetMapping(\"/users/{id}\")\nUserDto get(@PathVariable long id) { return service.find(id); }   // chặn là bình thường\n\n// WebFlux: cần cho streaming và backpressure\n@GetMapping(value = \"/events\", produces = MediaType.TEXT_EVENT_STREAM_VALUE)\nFlux<Event> stream() {\n    return repository.findAll().delayElements(Duration.ofSeconds(1));\n}",
+		"tags": ["webflux", "reactive", "virtual-thread", "backpressure"],
+		"quiz": {
+			"options": [
+				"WebFlux luôn nhanh hơn MVC trong mọi tình huống",
+				"Gọi JDBC (chặn) bên trong WebFlux là an toàn vì Netty tự xử lý",
+				"Virtual thread cung cấp đầy đủ backpressure như WebFlux",
+				"Từ Java 21, MVC với virtual thread đạt được phần lớn khả năng scale của WebFlux mà vẫn giữ code đồng bộ"
+			],
+			"correct": 3,
+			"explanation": "Lời gọi chặn trong event loop làm nghẽn toàn bộ server. Virtual thread giải quyết bài toán scale nhưng **không** cung cấp backpressure — đó vẫn là lý do chọn WebFlux."
+		}
+	},
+	{
+		"id": "spring-web-005",
+		"topic": "spring-web",
+		"difficulty": "medium",
+		"question": "Thiết kế REST API tốt cần tuân theo những nguyên tắc nào?",
+		"answerShort": "Resource là danh từ số nhiều, dùng đúng HTTP method và status code, versioning rõ ràng, phân trang cho collection, idempotent cho `PUT`/`DELETE`, và định dạng lỗi nhất quán theo RFC 9457.",
+		"answerLong": "**URI**: danh từ **số nhiều**, phân cấp theo quan hệ sở hữu, không đưa động từ vào đường dẫn (`/orders/42/lines`, không phải `/getOrderLines?id=42`). Hành động không ánh xạ được sang CRUD thì mô hình hoá thành resource: `POST /orders/42/cancellations`.\n\n**HTTP method và tính chất**:\n\n| Method | An toàn | Idempotent | Dùng cho |\n|---|---|---|---|\n| `GET` | có | có | đọc |\n| `POST` | không | **không** | tạo mới, hành động |\n| `PUT` | không | **có** | thay thế toàn bộ |\n| `PATCH` | không | không (nên thiết kế để có) | cập nhật một phần |\n| `DELETE` | không | **có** | xoá |\n\n**Idempotency quan trọng vì** client sẽ thử lại khi timeout. `POST` không idempotent nên cần **idempotency key** (client sinh UUID, server lưu và trả về kết quả cũ nếu key lặp lại) để tránh tạo trùng đơn hàng.\n\n**Status code**: 200 OK, 201 Created (kèm header `Location`), 202 Accepted (xử lý bất đồng bộ), 204 No Content, 304 Not Modified, 400, 401, 403, 404, 409, 422, 429, 500, 503.\n\n**Versioning**: đặt trong path (`/api/v1/...`) là cách phổ biến và dễ vận hành nhất; qua header thì \"sạch\" hơn về lý thuyết nhưng khó cache và khó debug.\n\n**Phân trang**: offset-based (`page`/`size`) đơn giản nhưng chậm và **không nhất quán** với dữ liệu đang thay đổi. Cursor-based (`?after=<cursor>`) ổn định và nhanh hơn với tập dữ liệu lớn.\n\n**Những thứ hay bị bỏ sót**: giới hạn tần suất (`429` kèm `Retry-After`), `ETag`/`If-None-Match` cho cache, HTTPS bắt buộc, phân trang mặc định để không ai lỡ tay `GET /users` trên bảng 10 triệu dòng.",
+		"code": "// 201 Created + Location theo đúng chuẩn\n@PostMapping(\"/orders\")\nResponseEntity<OrderDto> create(@Valid @RequestBody CreateOrder req,\n                                @RequestHeader(\"Idempotency-Key\") UUID key) {\n    var order = service.create(req, key);\n    return ResponseEntity.created(URI.create(\"/api/v1/orders/\" + order.id())).body(order);\n}\n\n// Phân trang cursor, có chặn kích thước tối đa\n@GetMapping(\"/orders\")\nPage<OrderDto> list(@RequestParam(required = false) String after,\n                    @RequestParam(defaultValue = \"20\") @Max(100) int size) { ... }",
+		"tags": ["rest", "idempotency", "pagination", "http-status"],
+		"quiz": {
+			"options": [
+				"`POST` là method idempotent nên client thử lại an toàn",
+				"`PUT` và `DELETE` là idempotent, còn `POST` thì không — nên cần idempotency key khi client thử lại",
+				"Phân trang offset-based luôn tốt hơn cursor-based",
+				"Nên đưa động từ vào URI để API dễ hiểu hơn"
+			],
+			"correct": 1,
+			"explanation": "Thử lại `POST` có thể tạo bản ghi trùng. Offset-based không nhất quán khi dữ liệu thay đổi giữa các trang, và URI nên là danh từ chỉ resource."
+		}
+	},
+	{
+		"id": "spring-web-006",
+		"topic": "spring-web",
+		"difficulty": "medium",
+		"question": "CORS là gì? Cấu hình trong Spring thế nào cho an toàn?",
+		"answerShort": "CORS là cơ chế cho phép trình duyệt gọi API khác origin, kiểm soát bằng header `Access-Control-Allow-*`. Cấu hình an toàn: liệt kê origin cụ thể; `allowedOrigins(\"*\")` **không** dùng chung được với `allowCredentials(true)`.",
+		"answerLong": "**Same-Origin Policy** chặn JavaScript đọc phản hồi từ origin khác (khác giao thức, host hoặc cổng). CORS là cơ chế server **nới lỏng có kiểm soát** hạn chế đó.\n\n**Simple request** — `GET`, `HEAD`, `POST` với content type cơ bản: trình duyệt gửi thẳng kèm header `Origin`, rồi kiểm tra `Access-Control-Allow-Origin` trong phản hồi. Điểm quan trọng: **request vẫn tới server và vẫn được thực thi**; trình duyệt chỉ chặn không cho JavaScript đọc kết quả. Vì thế CORS **không phải** cơ chế bảo vệ chống thay đổi dữ liệu — đó là việc của CSRF token và xác thực.\n\n**Preflight** — với method hoặc header không thuộc nhóm đơn giản, trình duyệt gửi `OPTIONS` trước để hỏi. Server trả `Access-Control-Allow-Methods`, `-Headers`, `-Max-Age`. Đặt `maxAge` hợp lý (ví dụ 30 phút) để giảm một nửa số round trip.\n\n**Cấu hình an toàn**:\n\n1. **Liệt kê origin cụ thể**. `allowedOrigins(\"*\")` cùng `allowCredentials(true)` bị đặc tả **cấm** — Spring ném lỗi lúc khởi động. Cần wildcard có credentials thì dùng `allowedOriginPatterns`, và chỉ khi thật sự cần.\n2. Chỉ mở method và header thực sự dùng.\n3. `allowCredentials(true)` chỉ khi dùng cookie; với JWT trong header `Authorization` thì không cần.\n4. Khi có Spring Security, CORS **phải** được cấu hình trong filter chain (`http.cors(...)`) — nếu không, request bị chặn **trước khi** tới MVC và preflight `OPTIONS` sẽ bị trả 401.\n\n**Ba cách khai báo**: `@CrossOrigin` trên controller (cục bộ), `WebMvcConfigurer.addCorsMappings` (toàn cục), hoặc `CorsConfigurationSource` bean (khi có Spring Security — đây là cách nên dùng).",
+		"code": "@Bean\nCorsConfigurationSource corsConfigurationSource() {\n    var c = new CorsConfiguration();\n    c.setAllowedOrigins(List.of(\"https://app.example.com\"));   // cụ thể, không dùng \"*\"\n    c.setAllowedMethods(List.of(\"GET\", \"POST\", \"PUT\", \"DELETE\"));\n    c.setAllowedHeaders(List.of(\"Authorization\", \"Content-Type\"));\n    c.setAllowCredentials(true);\n    c.setMaxAge(Duration.ofMinutes(30));                       // giảm số preflight\n    var src = new UrlBasedCorsConfigurationSource();\n    src.registerCorsConfiguration(\"/api/**\", c);\n    return src;\n}\n\n// Với Spring Security: bắt buộc bật trong filter chain\nhttp.cors(Customizer.withDefaults());",
+		"tags": ["cors", "preflight", "security", "same-origin"],
+		"quiz": {
+			"options": [
+				"CORS ngăn được request độc hại tới server, nên thay thế được CSRF token",
+				"`allowedOrigins(\"*\")` dùng chung với `allowCredentials(true)` là cấu hình hợp lệ",
+				"CORS chỉ ngăn trình duyệt đọc phản hồi; request vẫn tới server, và `\"*\"` không dùng chung được với credentials",
+				"Preflight request dùng method `POST`"
+			],
+			"correct": 2,
+			"explanation": "Đặc tả cấm kết hợp wildcard với credentials. CORS chỉ là hạn chế phía trình duyệt, không bảo vệ server — chống thay đổi dữ liệu là việc của CSRF token. Preflight dùng `OPTIONS`."
+		}
+	},
+	{
+		"id": "spring-web-007",
+		"topic": "spring-web",
+		"difficulty": "easy",
+		"question": "Các annotation ánh xạ tham số request trong Spring MVC?",
+		"answerShort": "`@PathVariable` (biến trong đường dẫn), `@RequestParam` (query hoặc form), `@RequestBody` (body, qua `HttpMessageConverter`), `@RequestHeader`, `@CookieValue`, `@ModelAttribute` (gom nhiều param vào object).",
+		"answerLong": "| Annotation | Nguồn dữ liệu | Ví dụ |\n|---|---|---|\n| `@PathVariable` | biến trong URI template | `/users/{id}` |\n| `@RequestParam` | query string hoặc form | `?page=2` |\n| `@RequestBody` | body request | JSON qua Jackson |\n| `@RequestHeader` | header HTTP | `Authorization` |\n| `@CookieValue` | cookie | `JSESSIONID` |\n| `@ModelAttribute` | gom nhiều param vào object | form binding |\n| `@RequestPart` | phần của multipart | upload file |\n| `@MatrixVariable` | tham số ma trận (hiếm) | `/cars;color=red` |\n\n**Các điểm hay gây lỗi**:\n\n1. `@RequestParam` mặc định **bắt buộc**. Thiếu tham số → 400. Dùng `required = false` hoặc `defaultValue`. Đặt `Optional<T>` cũng làm nó thành không bắt buộc.\n2. Từ Spring 6.1, cần cờ biên dịch `-parameters` để suy được tên tham số; thiếu nó phải ghi tên tường minh `@RequestParam(\"page\")`. Spring Boot bật sẵn cờ này, dự án khác thì chưa chắc.\n3. `@RequestBody` chỉ đọc được **một lần** — stream không tua lại được. Cần đọc lại (để log hoặc ký) thì phải bọc bằng `ContentCachingRequestWrapper`.\n4. `@ModelAttribute` binding theo tên field. Đây cũng là nơi phát sinh lỗ hổng **mass assignment**: đừng bind thẳng vào entity, hãy dùng DTO chỉ chứa những field client được phép đặt.\n5. Không dùng chung `@RequestBody` và `@ModelAttribute` trên cùng một request — hai cơ chế đọc body khác nhau.\n\n**Kiểu tham số không cần annotation**: `HttpServletRequest`, `Principal`, `Locale`, `Pageable` (Spring Data), `@AuthenticationPrincipal` (Spring Security).",
+		"code": "@GetMapping(\"/users/{id}/orders\")\nPage<OrderDto> list(\n    @PathVariable long id,\n    @RequestParam(defaultValue = \"0\") int page,\n    @RequestParam(required = false) String status,\n    @RequestHeader(value = \"X-Trace-Id\", required = false) String traceId,\n    Pageable pageable) { ... }\n\n// Upload nhiều phần\n@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)\nvoid upload(@RequestPart(\"meta\") @Valid FileMeta meta,\n            @RequestPart(\"file\") MultipartFile file) { ... }",
+		"tags": ["requestparam", "pathvariable", "requestbody", "binding"],
+		"quiz": {
+			"options": [
+				"`@RequestParam` mặc định là bắt buộc; thiếu tham số sẽ trả về HTTP 400",
+				"`@RequestBody` có thể đọc nhiều lần trong cùng một request",
+				"`@PathVariable` đọc dữ liệu từ query string",
+				"Bind trực tiếp `@ModelAttribute` vào entity là cách làm an toàn được khuyến nghị"
+			],
+			"correct": 0,
+			"explanation": "Body là stream nên chỉ đọc được một lần trừ khi bọc bằng `ContentCachingRequestWrapper`. `@PathVariable` đọc từ URI template, và bind thẳng vào entity mở đường cho mass assignment."
+		}
+	},
+	{
+		"id": "spring-web-008",
+		"topic": "spring-web",
+		"difficulty": "medium",
+		"question": "Gọi HTTP service khác từ Spring bằng gì? `RestTemplate`, `WebClient` và `RestClient` khác nhau ra sao?",
+		"answerShort": "`RestTemplate` đã ở chế độ duy trì (maintenance). `WebClient` không chặn, dùng cho reactive. `RestClient` (Spring 6.1) là API đồng bộ hiện đại với cú pháp fluent — lựa chọn mặc định cho code chặn.",
+		"answerLong": "| | `RestTemplate` | `WebClient` | `RestClient` |\n|---|---|---|---|\n| Có từ | Spring 3 | Spring 5 | **Spring 6.1** |\n| Mô hình | đồng bộ, chặn | không chặn, reactive | đồng bộ, chặn |\n| API | template method | fluent | fluent |\n| Trạng thái | maintenance | khuyến nghị cho reactive | **khuyến nghị cho code chặn** |\n\n**`RestTemplate`** vẫn hoạt động và không bị gỡ bỏ, nhưng không nhận tính năng mới. Dự án đang dùng thì không cần vội chuyển; dự án mới thì không nên bắt đầu bằng nó.\n\n**`WebClient`** hoạt động cả trong ứng dụng MVC. Trước Spring 6.1, cách phổ biến để có API fluent trong code chặn là dùng `WebClient` rồi `.block()` — nhưng làm vậy kéo theo cả stack reactive chỉ để dùng cú pháp.\n\n**`RestClient`** lấy API fluent của `WebClient` đặt lên hạ tầng đồng bộ của `RestTemplate`. Dùng chung `ClientHttpRequestFactory` và message converter nên chuyển đổi từ `RestTemplate` khá thẳng.\n\n**Ba điều bắt buộc phải cấu hình cho mọi HTTP client**:\n\n1. **Timeout** — connect và read. Mặc định của nhiều factory là **vô hạn**; một dependency treo sẽ làm cạn thread pool và kéo sập cả dịch vụ của bạn.\n2. **Connection pool** — dùng `HttpComponentsClientHttpRequestFactory` (Apache HttpClient 5) hoặc `JdkClientHttpRequestFactory`. Mặc định `SimpleClientHttpRequestFactory` không có pool.\n3. **Xử lý lỗi và thử lại** — `Resilience4j` cho circuit breaker, retry có backoff. Chỉ thử lại với thao tác idempotent.\n\n**HTTP Interface (Spring 6)**: khai báo một interface với annotation `@GetExchange`/`@PostExchange`, Spring sinh implementation — giống Feign nhưng là tính năng có sẵn của framework.",
+		"code": "@Bean\nRestClient restClient(RestClient.Builder builder) {\n    var factory = new HttpComponentsClientHttpRequestFactory();\n    factory.setConnectTimeout(Duration.ofSeconds(2));\n    factory.setReadTimeout(Duration.ofSeconds(5));   // BẮT BUỘC — mặc định là vô hạn\n    return builder.baseUrl(\"https://api.example.com\").requestFactory(factory).build();\n}\n\n// HTTP Interface — khai báo, Spring sinh implementation\ninterface UserApi {\n    @GetExchange(\"/users/{id}\")\n    UserDto find(@PathVariable long id);\n}",
+		"tags": ["restclient", "webclient", "resttemplate", "timeout"],
+		"quiz": {
+			"options": [
+				"`RestTemplate` đã bị gỡ bỏ hoàn toàn khỏi Spring 6",
+				"`WebClient` chỉ dùng được trong ứng dụng WebFlux",
+				"`RestClient` (Spring 6.1) là API fluent đồng bộ, được khuyến nghị cho code chặn trong dự án mới",
+				"Timeout mặc định của HTTP client trong Spring luôn được đặt sẵn ở mức an toàn"
+			],
+			"correct": 2,
+			"explanation": "`RestTemplate` chỉ ở chế độ maintenance chứ chưa bị gỡ. `WebClient` dùng được trong cả MVC, và nhiều request factory mặc định **không có** timeout — phải tự đặt."
+		}
+	}
+]

@@ -1,0 +1,162 @@
+[
+	{
+		"id": "jvm-memory-001",
+		"topic": "jvm-memory",
+		"difficulty": "medium",
+		"question": "JVM chia bộ nhớ runtime thành những vùng nào?",
+		"answerShort": "Heap (chia sẻ, chứa object) và Metaspace (metadata class, nằm ngoài heap). Mỗi thread có stack riêng, PC register và native method stack. Ngoài ra còn code cache của JIT và direct buffer.",
+		"answerLong": "**Vùng dùng chung giữa các thread**\n\n- **Heap** — nơi mọi object và mảng được cấp phát. Bị GC quản lý. Chia thành Young generation (Eden + 2 Survivor) và Old generation với các GC theo thế hệ. Hết chỗ → `OutOfMemoryError: Java heap space`.\n- **Metaspace** — metadata class, thay cho PermGen từ Java 8. Nằm trong **native memory**, mặc định không giới hạn (nên nó có thể ăn hết RAM máy). Giới hạn bằng `-XX:MaxMetaspaceSize`. Rò rỉ ở đây thường do sinh class động hoặc `ClassLoader` không được giải phóng khi redeploy.\n- **Code cache** — mã máy do JIT sinh ra. Đầy thì JIT dừng biên dịch và hiệu năng tụt hẳn.\n\n**Vùng riêng mỗi thread**\n\n- **JVM stack** — mỗi lần gọi method đẩy một stack frame chứa biến local, operand stack, tham chiếu constant pool. Đệ quy quá sâu → `StackOverflowError`. Kích thước đặt bằng `-Xss` (mặc định thường 512KB–1MB).\n- **PC register** — địa chỉ lệnh đang thực thi.\n- **Native method stack** — cho method `native`.\n\n**Ngoài heap**: `DirectByteBuffer` cấp phát native memory, giới hạn bằng `-XX:MaxDirectMemorySize`; NIO và Netty dùng nhiều.\n\n**Điểm hay bị nhầm**: \"primitive nằm trên stack, object nằm trên heap\" chỉ đúng với biến **local**. Field primitive của một object nằm **trong object đó**, tức là trên heap. Với escape analysis, JIT còn có thể xoá hẳn việc cấp phát object không thoát khỏi method (scalar replacement).",
+		"code": "# Các cờ hay dùng\njava -Xms2g -Xmx2g \\            # heap min = max, tránh resize lúc chạy\n     -Xss512k \\                 # stack mỗi thread\n     -XX:MaxMetaspaceSize=256m \\\n     -XX:MaxDirectMemorySize=512m \\\n     -XX:+HeapDumpOnOutOfMemoryError \\\n     -XX:HeapDumpPath=/var/log/app \\\n     -jar app.jar",
+		"tags": ["heap", "stack", "metaspace", "jvm-memory"],
+		"quiz": {
+			"options": [
+				"Metaspace nằm trong heap và bị giới hạn bởi `-Xmx`",
+				"Field primitive của một object được lưu trên stack, không phải trên heap",
+				"Mỗi thread có stack riêng, còn heap và Metaspace được chia sẻ giữa mọi thread",
+				"PermGen vẫn là vùng chứa metadata class trong Java 17"
+			],
+			"correct": 2,
+			"explanation": "Metaspace nằm ở native memory ngoài heap và không bị `-Xmx` chi phối. Field của object luôn nằm cùng object trên heap. PermGen đã bị thay bằng Metaspace từ Java 8."
+		}
+	},
+	{
+		"id": "jvm-memory-002",
+		"topic": "jvm-memory",
+		"difficulty": "medium",
+		"question": "Garbage collector xác định object nào là rác bằng cách nào?",
+		"answerShort": "Bằng **reachability** từ tập GC root (biến local trên stack, biến static, JNI reference, thread đang chạy...). Object không còn đường đi tới từ root là rác. Java **không** dùng đếm tham chiếu nên chu trình tham chiếu vẫn thu hồi được.",
+		"answerLong": "**GC roots** gồm:\n\n- Biến local và tham số trong stack frame của mọi thread đang sống.\n- Field `static` của class đã được load.\n- Tham chiếu JNI (native).\n- Object đang bị dùng làm monitor lock.\n- Bản thân các đối tượng `Thread` đang chạy.\n\nThuật toán đánh dấu (mark) đi từ root theo mọi tham chiếu; những gì không tới được là rác. Vì thế **chu trình A↔B không có root nào trỏ tới vẫn bị thu hồi** — khác hẳn với đếm tham chiếu (như Python, Objective-C) vốn cần cơ chế riêng để phá chu trình.\n\n**Giả thuyết thế hệ** — nền tảng của mọi GC hiện đại: phần lớn object chết rất trẻ; object già hiếm khi trỏ tới object trẻ. Vì thế heap chia thành Young và Old, quét Young thường xuyên và rẻ.\n\n**Vòng đời trong Young gen**: cấp phát ở Eden → Minor GC chép object còn sống sang Survivor → sống qua đủ số lần (`MaxTenuringThreshold`, mặc định 15) thì được thăng lên Old. Object quá lớn có thể vào thẳng Old.\n\n**Bốn thuật toán nền**: Mark-Sweep (phân mảnh), Mark-Compact (dồn lại, chậm hơn), Copying (dùng cho Young — rất hiệu quả khi tỉ lệ sống thấp), và biến thể theo vùng của G1.\n\n**Tham chiếu yếu dần**: `Strong` (mặc định, không bao giờ bị thu khi còn reachable) → `SoftReference` (thu khi sắp hết bộ nhớ — hợp cho cache) → `WeakReference` (thu ở lần GC kế tiếp — dùng trong `WeakHashMap`, `ThreadLocal` key) → `PhantomReference` (dùng để dọn tài nguyên native, thay cho `finalize()` đã bị deprecate).",
+		"code": "// WeakReference: cache không giữ object sống\nMap<Key, Value> cache = new WeakHashMap<>();\n\n// Bẫy: static collection là GC root -> mọi thứ bên trong sống mãi\npublic class Registry {\n    private static final List<Session> ALL = new ArrayList<>(); // rò rỉ nếu không bao giờ xoá\n}",
+		"tags": ["gc", "reachability", "generational", "weak-reference"],
+		"quiz": {
+			"options": [
+				"Java dùng đếm tham chiếu nên hai object trỏ vòng vào nhau sẽ không bao giờ được thu hồi",
+				"GC xác định rác bằng khả năng tiếp cận từ GC root, nên chu trình tham chiếu vẫn được thu hồi",
+				"Gọi `System.gc()` đảm bảo GC chạy ngay lập tức",
+				"Object có `finalize()` được thu hồi nhanh hơn object thường"
+			],
+			"correct": 1,
+			"explanation": "Reachability analysis khiến chu trình không phải vấn đề. `System.gc()` chỉ là gợi ý và có thể bị bỏ qua hoàn toàn; `finalize()` **làm chậm** việc thu hồi và đã bị deprecate để gỡ bỏ."
+		}
+	},
+	{
+		"id": "jvm-memory-003",
+		"topic": "jvm-memory",
+		"difficulty": "hard",
+		"question": "So sánh các garbage collector chính: Serial, Parallel, G1, ZGC. Chọn cái nào?",
+		"answerShort": "G1 là mặc định từ Java 9, cân bằng giữa throughput và độ trễ, có mục tiêu pause time. Parallel cho throughput cao nhất khi không quan tâm pause. ZGC cho pause dưới 1ms với heap rất lớn. Serial cho container nhỏ.",
+		"answerLong": "| GC | Pause | Throughput | Heap phù hợp | Ghi chú |\n|---|---|---|---|---|\n| Serial | cao | thấp | < 100MB | một thread; hợp container nhỏ, CLI ngắn |\n| Parallel | cao (vài trăm ms) | **cao nhất** | tới ~8GB | tối ưu cho batch, ETL |\n| G1 | trung bình (mục tiêu ~200ms) | cao | 4GB–hàng chục GB | **mặc định từ Java 9** |\n| ZGC | **< 1ms** | hơi thấp hơn G1 | tới hàng TB | generational từ Java 21 |\n| Shenandoah | < 10ms | tương tự ZGC | lớn | có trong bản build của Red Hat |\n\n**G1 (Garbage-First)**: chia heap thành ~2048 vùng (region) kích thước bằng nhau; mỗi vùng đóng vai Eden, Survivor hoặc Old **linh động**. Thu gom ưu tiên vùng nhiều rác nhất (chính là tên gọi). Đặt mục tiêu bằng `-XX:MaxGCPauseMillis` (mặc định 200) và G1 tự điều chỉnh số vùng thu mỗi lần. Vẫn có pha *stop-the-world* nhưng có thể dự đoán được.\n\n**ZGC**: gần như toàn bộ công việc chạy đồng thời với ứng dụng, dùng coloured pointer và load barrier. Pause không phụ thuộc kích thước heap. Từ Java 21 có bản generational (`-XX:+ZGenerational`, thành mặc định của ZGC ở Java 23). Cái giá là throughput thấp hơn G1 khoảng 10–15% và tốn thêm bộ nhớ.\n\n**Cách chọn thực tế**:\n\n1. Bắt đầu bằng mặc định (G1). Đừng đổi khi chưa đo.\n2. Batch/ETL, không ai nhìn độ trễ → Parallel.\n3. Dịch vụ nhạy độ trễ (p99 quan trọng), heap ≥ 16GB → ZGC.\n4. Container nhỏ, 1 CPU → Serial.\n\n**Quan trọng hơn việc chọn GC**: giảm rác sinh ra và đặt `-Xms = -Xmx`. Phần lớn vấn đề GC thật ra là vấn đề tỉ lệ cấp phát, không phải chọn sai collector.",
+		"code": "# G1 (mặc định) với mục tiêu pause\njava -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -Xms4g -Xmx4g -jar app.jar\n\n# ZGC generational, cho dịch vụ nhạy độ trễ\njava -XX:+UseZGC -XX:+ZGenerational -Xms16g -Xmx16g -jar app.jar\n\n# Luôn bật log GC để còn phân tích được\n-Xlog:gc*:file=/var/log/gc.log:time,uptime:filecount=5,filesize=10M",
+		"tags": ["g1", "zgc", "parallel-gc", "tuning"],
+		"quiz": {
+			"options": [
+				"Serial GC là collector mặc định của Java 17",
+				"ZGC có thời gian pause tăng tuyến tính theo kích thước heap",
+				"Parallel GC cho độ trễ thấp nhất trong các collector",
+				"G1 chia heap thành nhiều region và ưu tiên thu gom region chứa nhiều rác nhất"
+			],
+			"correct": 3,
+			"explanation": "\"Garbage-First\" chính là chiến lược đó. Mặc định từ Java 9 là G1; pause của ZGC gần như độc lập với kích thước heap; Parallel tối ưu throughput chứ không phải độ trễ."
+		}
+	},
+	{
+		"id": "jvm-memory-004",
+		"topic": "jvm-memory",
+		"difficulty": "medium",
+		"question": "Memory leak trong Java xảy ra kiểu gì dù đã có GC? Cách chẩn đoán?",
+		"answerShort": "Leak trong Java là object vẫn **reachable** nhưng không còn được dùng — GC không thể thu. Nguồn phổ biến: static collection, `ThreadLocal` không `remove()`, listener không huỷ đăng ký, `ClassLoader` bị giữ, cache không giới hạn.",
+		"answerLong": "**Định nghĩa**: object không còn cần thiết về mặt nghiệp vụ nhưng vẫn có đường tới từ GC root. GC làm đúng nhiệm vụ — vấn đề nằm ở code.\n\n**Các nguồn thường gặp**:\n\n1. **Static collection** — `static Map` làm cache mà không bao giờ evict. Field static là GC root nên mọi thứ bên trong sống theo class loader.\n2. **`ThreadLocal` trong thread pool** — không `remove()` thì value sống theo tuổi thọ thread, tức là mãi mãi.\n3. **Listener / callback** — đăng ký mà không huỷ. Observer giữ subject sống.\n4. **Key mutable trong `HashMap`** — sửa field tham gia `hashCode()` sau khi put khiến entry không bao giờ tìm thấy và không bao giờ xoá được.\n5. **`ClassLoader` leak** — kinh điển trong app server: một tham chiếu (thread, `ThreadLocal`, JDBC driver) giữ `ClassLoader` của webapp, khiến redeploy vài lần là hết Metaspace.\n6. **Tài nguyên không đóng** — `InputStream`, `Connection`, `Session`. Dùng try-with-resources.\n7. **`substring` trước Java 7u6** — chia sẻ chung mảng char nên giữ cả chuỗi gốc. Không còn đúng ở JDK hiện đại.\n\n**Quy trình chẩn đoán**:\n\n1. Bật `-XX:+HeapDumpOnOutOfMemoryError`.\n2. Xem xu hướng: `jstat -gcutil <pid> 1s` — nếu Old gen sau mỗi Full GC vẫn tăng đều thì đúng là leak.\n3. Lấy heap dump: `jmap -dump:live,format=b,file=heap.hprof <pid>`.\n4. Phân tích bằng **Eclipse MAT** (báo cáo *Leak Suspects* thường chỉ thẳng ra thủ phạm) hoặc VisualVM/JFR.\n5. Trong MAT: tìm object chiếm nhiều retained heap nhất → xem **path to GC root** để biết ai đang giữ nó.",
+		"code": "# Theo dõi: cột O (old gen %) tăng đều sau mỗi Full GC là dấu hiệu leak\njstat -gcutil $(pgrep -f app.jar) 1000\n\n# Lấy heap dump chỉ gồm object còn sống\njmap -dump:live,format=b,file=heap.hprof <pid>\n\n# Java Flight Recorder: chi phí thấp, dùng được cả trên production\njava -XX:StartFlightRecording=duration=120s,filename=rec.jfr -jar app.jar",
+		"tags": ["memory-leak", "heap-dump", "mat", "diagnosis"],
+		"quiz": {
+			"options": [
+				"Java có GC nên không thể xảy ra memory leak",
+				"Memory leak trong Java là object vẫn reachable từ GC root nhưng không còn được dùng nữa",
+				"Gọi `System.gc()` là cách khắc phục memory leak",
+				"Memory leak chỉ xảy ra khi dùng JNI hoặc native code"
+			],
+			"correct": 1,
+			"explanation": "GC chỉ thu object không còn reachable. Static collection, `ThreadLocal` không `remove()`, listener chưa huỷ đăng ký đều giữ object sống một cách hợp lệ về mặt kỹ thuật."
+		}
+	},
+	{
+		"id": "jvm-memory-005",
+		"topic": "jvm-memory",
+		"difficulty": "hard",
+		"question": "Class loading trong JVM diễn ra thế nào? Mô hình parent delegation là gì?",
+		"answerShort": "Ba pha: Loading → Linking (verify, prepare, resolve) → Initialization. ClassLoader theo mô hình **uỷ quyền lên cha trước**: mỗi loader nhờ cha nạp trước, chỉ tự nạp khi cha thất bại — nhờ đó lớp lõi JDK không bị giả mạo.",
+		"answerLong": "**Ba pha của vòng đời class**:\n\n1. **Loading** — đọc bytecode, tạo object `Class` trong Metaspace.\n2. **Linking**:\n   - *Verification* — kiểm bytecode hợp lệ và an toàn kiểu. Đây là hàng rào bảo mật cốt lõi của JVM.\n   - *Preparation* — cấp phát field `static` và gán **giá trị mặc định** (`0`, `null`), chưa chạy code khởi tạo.\n   - *Resolution* — đổi symbolic reference thành direct reference (có thể lười, làm khi cần).\n3. **Initialization** — chạy `<clinit>`: các initializer static và khối `static {}` theo thứ tự trong source. JVM đảm bảo chỉ chạy **một lần** và thread-safe.\n\n**Khi nào một class được initialize**: `new`, truy cập field static không phải hằng số compile-time, gọi method static, reflection, hoặc khi class con được initialize. Đọc một `static final int` có giá trị hằng thì **không** kích hoạt — nó đã được inline lúc biên dịch.\n\n**Phân cấp ClassLoader** (Java 9+ với module):\n\n- **Bootstrap** — nạp `java.base` và các module lõi; viết bằng native, `getClassLoader()` trả `null`.\n- **Platform** (trước là Extension) — module nền tảng khác.\n- **Application/System** — nạp từ classpath của ứng dụng.\n\n**Parent delegation**: khi được yêu cầu nạp một class, loader hỏi cha trước; chỉ khi cha không tìm được nó mới tự tìm. Hai lợi ích: (1) **an toàn** — không ai thay được `java.lang.String` bằng bản của mình; (2) **duy nhất** — một class chỉ được nạp một lần trong phân cấp.\n\n**Danh tính runtime của class là `(tên đầy đủ, ClassLoader)`**. Cùng một file `.class` nạp bởi hai loader khác nhau là hai kiểu khác nhau — gán cho nhau sẽ ném `ClassCastException` với thông báo trông rất vô lý. Đây là gốc rễ của phần lớn lỗi lạ trong app server.\n\n**Cố tình phá delegation**: Tomcat nạp class của webapp **trước** để mỗi ứng dụng dùng phiên bản thư viện riêng; OSGi và JPMS có mô hình riêng.",
+		"code": "// Class chỉ initialize khi thực sự cần -> nền tảng của holder idiom\npublic class Singleton {\n    private Singleton() {}\n    private static class Holder {\n        static final Singleton INSTANCE = new Singleton();   // <clinit> chạy đúng 1 lần, thread-safe\n    }\n    public static Singleton getInstance() { return Holder.INSTANCE; }\n}\n\n// Xem class nào được nạp từ đâu\n// java -verbose:class -jar app.jar | grep MyClass",
+		"tags": ["class-loading", "classloader", "delegation", "clinit"],
+		"quiz": {
+			"options": [
+				"Class được xác định duy nhất bởi tên đầy đủ, bất kể ClassLoader nào nạp nó",
+				"Pha Preparation gán giá trị thật cho biến static theo code khởi tạo",
+				"ClassLoader tự tìm class trước, chỉ nhờ cha khi bản thân thất bại",
+				"Parent delegation khiến ClassLoader nhờ cha nạp trước, nhờ đó lớp lõi JDK không bị thay thế"
+			],
+			"correct": 3,
+			"explanation": "Uỷ quyền lên trên là hàng rào bảo vệ lớp lõi. Danh tính runtime của class là cặp (tên, ClassLoader). Preparation chỉ gán giá trị mặc định; giá trị thật được gán ở pha Initialization."
+		}
+	},
+	{
+		"id": "jvm-memory-006",
+		"topic": "jvm-memory",
+		"difficulty": "medium",
+		"question": "JIT compiler hoạt động thế nào? Tiered compilation là gì?",
+		"answerShort": "JVM chạy bytecode bằng interpreter, đồng thời đếm số lần thực thi. Method \"nóng\" được biên dịch sang mã máy. Tiered compilation dùng C1 (biên dịch nhanh, tối ưu vừa) trước rồi chuyển sang C2 (chậm hơn, tối ưu sâu) cho code nóng nhất.",
+		"answerLong": "**Vì sao vừa thông dịch vừa biên dịch**: thông dịch khởi động ngay nhưng chậm; biên dịch nhanh nhưng tốn thời gian và bộ nhớ. JVM chọn cả hai và dùng dữ liệu thực thi thật (profile) để tối ưu — điều mà compiler tĩnh không có.\n\n**Tiered compilation** (mặc định từ Java 8), 5 mức:\n\n- Mức 0: interpreter.\n- Mức 1–3: **C1** — biên dịch nhanh, tối ưu cơ bản; mức 2–3 còn thu thập profile.\n- Mức 4: **C2** — tối ưu sâu dựa trên profile đã thu.\n\n**Các tối ưu quan trọng của C2**:\n\n- **Inlining** — quan trọng nhất, vì nó mở đường cho mọi tối ưu khác. Method nhỏ và nóng được nhúng thẳng vào nơi gọi.\n- **Escape analysis** — object không thoát khỏi method thì có thể bị *scalar replacement* (tách thành biến local, không cấp phát trên heap) và bỏ luôn khoá (*lock elision*).\n- **Loop unrolling**, **vectorisation (SIMD)**, **dead code elimination**, **constant folding**.\n- **Speculative optimisation** — giả định dựa trên profile (ví dụ \"lời gọi này luôn là kiểu X\"). Nếu giả định sai, JVM **deoptimise** và quay lại interpreter.\n\n**Hệ quả thực tế**:\n\n- **Warm-up**: vài nghìn lần chạy đầu tiên chậm hơn đáng kể. Benchmark không có warm-up là benchmark sai — đó là lý do phải dùng JMH.\n- Method quá lớn (> 8000 byte bytecode) **không** được JIT biên dịch. Method khổng lồ chạy mãi ở chế độ thông dịch.\n- Đo hiệu năng trên production phải dùng công cụ hiểu JIT: JFR, async-profiler.\n\n**Cờ hữu ích**: `-XX:+PrintCompilation`, `-XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining`. **AOT/CDS** (`-XX:SharedArchiveFile`) và GraalVM Native Image giải quyết vấn đề khởi động chậm theo hướng khác.",
+		"code": "// Escape analysis: object này có thể không bao giờ được cấp phát trên heap\npublic double distance(double x, double y) {\n    Point p = new Point(x, y);   // không thoát khỏi method -> scalar replacement\n    return Math.sqrt(p.x() * p.x() + p.y() * p.y());\n}\n\n# Benchmark đúng cách: dùng JMH, không tự đo bằng System.nanoTime()\n# java -XX:+PrintCompilation -jar app.jar | head -50",
+		"tags": ["jit", "c1-c2", "escape-analysis", "warmup"],
+		"quiz": {
+			"options": [
+				"JIT biên dịch toàn bộ chương trình sang mã máy ngay khi khởi động",
+				"Tiered compilation dùng C1 để biên dịch nhanh, rồi chuyển code nóng nhất sang C2 tối ưu sâu",
+				"Escape analysis buộc mọi object phải được cấp phát trên heap",
+				"Method có kích thước bytecode bất kỳ đều được JIT biên dịch như nhau"
+			],
+			"correct": 1,
+			"explanation": "JVM chỉ biên dịch method \"nóng\", nên có giai đoạn warm-up. Escape analysis cho phép **tránh** cấp phát heap, và method quá lớn sẽ bị JIT bỏ qua."
+		}
+	},
+	{
+		"id": "jvm-memory-007",
+		"topic": "jvm-memory",
+		"difficulty": "easy",
+		"question": "`StackOverflowError` và `OutOfMemoryError` khác nhau thế nào? Xử lý ra sao?",
+		"answerShort": "`StackOverflowError`: stack của một thread hết chỗ, gần như luôn do đệ quy không có điều kiện dừng. `OutOfMemoryError`: JVM không cấp phát được nữa — có nhiều biến thể ứng với các vùng nhớ khác nhau, mỗi loại một nguyên nhân.",
+		"answerLong": "**`StackOverflowError`** — mỗi lời gọi method đẩy một frame lên stack của thread (mặc định 512KB–1MB, đặt bằng `-Xss`). Nguyên nhân:\n\n- Đệ quy thiếu hoặc sai điều kiện dừng (chiếm đa số áp đảo).\n- Đệ quy đúng nhưng quá sâu — Java **không** có tối ưu tail call, nên phải viết lại thành vòng lặp hoặc dùng stack tường minh.\n- Vòng lặp vô hạn giữa `toString()`/`equals()` của hai object trỏ nhau.\n- Chuỗi proxy/AOP quá dài (hay gặp với Spring khi cấu hình sai gây tự gọi vòng).\n\nTăng `-Xss` chỉ là băng dán — chẩn đoán bằng cách đọc stack trace, nó sẽ lộ ra khung lặp đi lặp lại.\n\n**Các biến thể `OutOfMemoryError`** và nghĩa của từng loại:\n\n| Thông báo | Nguyên nhân |\n|---|---|\n| `Java heap space` | object sống quá nhiều: leak, cache vô hạn, hoặc heap đặt quá nhỏ |\n| `GC overhead limit exceeded` | tốn > 98% thời gian cho GC mà thu lại < 2% heap |\n| `Metaspace` | quá nhiều class: sinh class động, `ClassLoader` leak khi redeploy |\n| `Unable to create new native thread` | chạm giới hạn thread của OS; thường do tạo thread không kiểm soát |\n| `Direct buffer memory` | rò rỉ `DirectByteBuffer` (NIO, Netty) |\n| `Requested array size exceeds VM limit` | cố tạo mảng lớn hơn giới hạn JVM |\n\n**Nguyên tắc xử lý**: cả hai đều là `Error`, không phải `Exception` — **không** bắt để tiếp tục chạy, vì JVM đã ở trạng thái không tin cậy được. Đúng cách là bật `-XX:+HeapDumpOnOutOfMemoryError`, để tiến trình chết, cho container/orchestrator khởi động lại, rồi phân tích dump.",
+		"code": "// StackOverflowError: thiếu điều kiện dừng\nint fact(int n) { return n * fact(n - 1); }        // sai\nint fact(int n) { return n <= 1 ? 1 : n * fact(n - 1); }  // đúng\n\n# Cấu hình nên có ở mọi môi trường production\n-XX:+HeapDumpOnOutOfMemoryError\n-XX:HeapDumpPath=/var/log/app/heap.hprof\n-XX:+ExitOnOutOfMemoryError",
+		"tags": ["stackoverflow", "outofmemory", "error", "recursion"],
+		"quiz": {
+			"options": [
+				"Nên bắt `OutOfMemoryError` và cho ứng dụng chạy tiếp bình thường",
+				"`StackOverflowError` xảy ra khi heap hết chỗ chứa object",
+				"`OutOfMemoryError: Metaspace` thường do sinh class động hoặc `ClassLoader` bị giữ lại",
+				"Tăng `-Xss` là cách khắc phục đúng cho mọi `StackOverflowError`"
+			],
+			"correct": 2,
+			"explanation": "Metaspace chứa metadata class nên đầy khi số class tăng không kiểm soát. `StackOverflowError` là hết stack chứ không phải heap, và cả hai `Error` này không nên bắt để chạy tiếp."
+		}
+	},
+	{
+		"id": "jvm-memory-008",
+		"topic": "jvm-memory",
+		"difficulty": "medium",
+		"question": "Chạy JVM trong container có gì cần lưu ý về bộ nhớ và CPU?",
+		"answerShort": "JVM hiện đại (Java 10+) đọc được cgroup limit của container. Nhưng heap mặc định chỉ chiếm 25% RAM container, và tổng bộ nhớ JVM còn có Metaspace, stack, code cache, direct buffer — nên `-Xmx` phải nhỏ hơn memory limit khá nhiều.",
+		"answerLong": "**Trước Java 8u191**: JVM đọc thông tin của **máy chủ vật lý**, không phải giới hạn container. Container 512MB nhưng JVM tưởng có 64GB → đặt heap khổng lồ → bị OOMKilled bởi kernel (exit code 137), không hề có `OutOfMemoryError` nào trong log. Đây là bẫy kinh điển.\n\n**Từ Java 10+** (backport về 8u191): `UseContainerSupport` bật mặc định, JVM đọc cgroup v1/v2 để biết giới hạn bộ nhớ và CPU.\n\n**Điểm then chốt: RSS của tiến trình ≫ heap.** Tổng bộ nhớ gồm:\n\n```\nRSS ≈ Heap + Metaspace + Code cache + Thread stacks (số thread × Xss)\n      + Direct buffer + GC structures + malloc của native lib\n```\n\nPhần ngoài heap thường chiếm 200–500MB. Vì thế đặt `-Xmx` bằng đúng memory limit chắc chắn dẫn tới OOMKilled.\n\n**Hai cách cấu hình**:\n\n- `-XX:MaxRAMPercentage=70` — theo tỉ lệ, thích nghi khi đổi kích thước container. Mặc định `MaxRAMPercentage` chỉ là **25%**, quá thấp cho hầu hết dịch vụ.\n- `-Xms` và `-Xmx` cố định và bằng nhau — dễ dự đoán, tránh chi phí resize heap.\n\n**CPU**: `Runtime.availableProcessors()` phản ánh cgroup quota. Đây là con số quyết định số thread GC, kích thước `ForkJoinPool.commonPool()` và nhiều thread pool của thư viện. CPU limit 0.5 core làm `availableProcessors()` trả về 1 — pool song song co lại còn một thread, và đó thường là nguyên nhân thật sự khi \"app chạy chậm bất thường trong container\".\n\n**Chẩn đoán**: Native Memory Tracking (`-XX:NativeMemoryTracking=summary` + `jcmd <pid> VM.native_memory summary`) cho biết chính xác từng vùng đang chiếm bao nhiêu.",
+		"code": "# Đặt theo tỉ lệ, chừa chỗ cho bộ nhớ ngoài heap\njava -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=70 \\\n     -XX:+UseG1GC -XX:MaxGCPauseMillis=100 \\\n     -XX:NativeMemoryTracking=summary \\\n     -jar app.jar\n\n# Kiểm tra JVM thấy gì bên trong container\njava -XX:+PrintFlagsFinal -version | grep -E 'MaxHeapSize|ActiveProcessorCount'\njcmd 1 VM.native_memory summary",
+		"tags": ["container", "cgroup", "maxrampercentage", "oomkilled"],
+		"quiz": {
+			"options": [
+				"Đặt `-Xmx` bằng đúng memory limit của container là cấu hình an toàn",
+				"Từ Java 10, JVM đọc được cgroup limit nhưng heap mặc định chỉ chiếm khoảng 25% RAM container",
+				"Bộ nhớ mà JVM chiếm chính xác bằng kích thước heap",
+				"`Runtime.availableProcessors()` luôn trả về số nhân của máy chủ vật lý"
+			],
+			"correct": 1,
+			"explanation": "`MaxRAMPercentage` mặc định 25% thường quá thấp. RSS còn gồm Metaspace, stack, code cache, direct buffer — nên `-Xmx` phải nhỏ hơn limit, nếu không sẽ bị OOMKilled."
+		}
+	}
+]

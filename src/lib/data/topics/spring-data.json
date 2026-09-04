@@ -1,0 +1,162 @@
+[
+	{
+		"id": "spring-data-001",
+		"topic": "spring-data",
+		"difficulty": "hard",
+		"question": "Vấn đề N+1 query trong JPA là gì? Cách phát hiện và khắc phục?",
+		"answerShort": "Một truy vấn lấy N entity, rồi mỗi entity lại sinh thêm một truy vấn để nạp quan hệ lazy — tổng cộng N+1 lần đi database. Khắc phục bằng `JOIN FETCH`, `@EntityGraph`, hoặc `@BatchSize`.",
+		"answerLong": "**Vì sao xảy ra**: quan hệ lazy chỉ nạp khi được truy cập. Duyệt qua N `Order` và gọi `order.getCustomer().getName()` trên mỗi cái sinh ra N truy vấn phụ. Với N = 1000, một trang web biến thành 1001 lần round trip database.\n\n**Cách phát hiện** — bắt buộc phải có, vì bug này không lộ ra khi test với 5 bản ghi:\n\n1. Bật log SQL: `spring.jpa.show-sql=true` hoặc `logging.level.org.hibernate.SQL=DEBUG`.\n2. Dùng thư viện đếm truy vấn: **datasource-proxy** hoặc **QuickPerf** để khẳng định số truy vấn trong test.\n3. Hibernate statistics: `spring.jpa.properties.hibernate.generate_statistics=true`.\n\n**Cách khắc phục**:\n\n| Cách | Khi nào dùng |\n|---|---|\n| `JOIN FETCH` trong JPQL | truy vấn cụ thể cần quan hệ |\n| `@EntityGraph` trên method repository | khai báo, tái dùng được, kết hợp được với derived query |\n| `@BatchSize(size = 50)` | nạp quan hệ theo lô `IN (...)` thay vì từng cái |\n| DTO projection | **tốt nhất cho màn hình chỉ đọc** — chỉ lấy đúng cột cần |\n\n**Ba cái bẫy**:\n\n1. **Không `JOIN FETCH` hai collection cùng lúc** — sinh ra tích Descartes. Hibernate 6 ném `MultipleBagFetchException` với `List`; đổi sang `Set` hoặc tách thành nhiều truy vấn.\n2. **`JOIN FETCH` cộng phân trang** khiến Hibernate phải phân trang **trong bộ nhớ** (cảnh báo `HHH000104`) — nó tải toàn bộ kết quả về rồi mới cắt. Rất nguy hiểm với bảng lớn.\n3. **`FetchType.EAGER` không phải giải pháp** — nó chỉ dời N+1 sang mọi truy vấn khác, kể cả khi không cần quan hệ đó. Luôn để `LAZY` và fetch có chủ đích tại từng truy vấn.\n\n**Nguyên tắc chung**: `@ManyToOne` và `@OneToOne` mặc định là `EAGER` theo đặc tả JPA — hãy đổi chúng thành `LAZY` một cách tường minh.",
+		"code": "// Gây N+1\nList<Order> orders = orderRepo.findAll();\norders.forEach(o -> log.info(o.getCustomer().getName()));  // +N truy vấn\n\n// Cách 1: EntityGraph, khai báo\n@EntityGraph(attributePaths = {\"customer\", \"lines\"})\nList<Order> findByStatus(OrderStatus status);\n\n// Cách 2: DTO projection — tốt nhất cho màn hình chỉ đọc\n@Query(\"select new com.app.OrderSummary(o.id, c.name, o.total) \" +\n       \"from Order o join o.customer c where o.status = :s\")\nList<OrderSummary> findSummaries(@Param(\"s\") OrderStatus s);",
+		"tags": ["n-plus-1", "entitygraph", "join-fetch", "lazy-loading"],
+		"quiz": {
+			"options": [
+				"Đổi quan hệ sang `FetchType.EAGER` là cách khắc phục N+1 được khuyến nghị",
+				"`JOIN FETCH` kết hợp phân trang khiến Hibernate phải phân trang trong bộ nhớ",
+				"N+1 luôn lộ ra ngay trong test với dữ liệu nhỏ",
+				"Có thể `JOIN FETCH` nhiều collection cùng lúc mà không gặp vấn đề gì"
+			],
+			"correct": 1,
+			"explanation": "Cảnh báo `HHH000104` báo hiệu điều này — toàn bộ kết quả bị tải về rồi mới cắt trang. `EAGER` chỉ dời vấn đề, và fetch nhiều collection sinh tích Descartes."
+		}
+	},
+	{
+		"id": "spring-data-002",
+		"topic": "spring-data",
+		"difficulty": "medium",
+		"question": "Vòng đời của một JPA entity gồm những trạng thái nào?",
+		"answerShort": "**Transient** (mới `new`, chưa gắn với persistence context) → **Managed/Persistent** (được theo dõi, thay đổi tự động đồng bộ) → **Detached** (đã từng managed, context đã đóng) → **Removed** (đánh dấu xoá, sẽ `DELETE` khi flush).",
+		"answerLong": "**Bốn trạng thái**:\n\n1. **Transient** — vừa `new`, chưa có id, `EntityManager` không biết tới.\n2. **Managed** — nằm trong persistence context. Đây là trạng thái quan trọng nhất: Hibernate giữ một **snapshot** lúc nạp, và khi flush sẽ so sánh để tự sinh `UPDATE`. Đó là **dirty checking** — bạn không cần gọi `save()` cho entity đã managed.\n3. **Detached** — persistence context đã đóng (thường là khi transaction kết thúc). Thay đổi không còn được theo dõi. Truy cập quan hệ lazy ở trạng thái này ném `LazyInitializationException`.\n4. **Removed** — đã gọi `remove()`, sẽ sinh `DELETE` lúc flush.\n\n**Các phép chuyển**: `persist()` (transient → managed), `merge()` (detached → managed, **trả về một instance khác**), `remove()`, `detach()`/`clear()`, `refresh()`.\n\n**Ba điểm hay bị hỏi**:\n\n- **`persist` khác `merge`**: `persist` gắn chính object bạn truyền vào. `merge` **copy** trạng thái sang một instance managed và **trả về instance đó** — object gốc vẫn detached. Quên dùng giá trị trả về của `merge` là bug rất phổ biến.\n- **Dirty checking**: sửa entity managed trong transaction là đủ, không cần `save()`. `save()` của Spring Data thực chất gọi `persist` hoặc `merge` tuỳ vào entity đã có id hay chưa.\n- **`LazyInitializationException`**: xảy ra khi truy cập quan hệ lazy sau khi context đóng. Cách đúng là fetch dữ liệu cần thiết **bên trong** transaction hoặc dùng DTO projection. Bật `spring.jpa.open-in-view` để \"khắc phục\" là che giấu vấn đề — nó giữ connection suốt vòng đời request và làm cạn connection pool dưới tải.\n\n**Persistence context còn là cache tầng một**: `find()` cùng một id hai lần trong một transaction chỉ đi database một lần.",
+		"code": "@Transactional\npublic void updatePrice(long id, BigDecimal price) {\n    Product p = repo.findById(id).orElseThrow();  // managed\n    p.setPrice(price);                            // dirty checking tự sinh UPDATE\n    // không cần repo.save(p)\n}\n\n// merge trả về instance KHÁC — phải dùng giá trị trả về\nProduct detached = new Product(id, \"tên mới\");\nProduct managed = em.merge(detached);\nmanaged.setPrice(...);   // sửa cái này, không phải `detached`\n\n# Tắt open-in-view để lộ vấn đề sớm thay vì che giấu\nspring.jpa.open-in-view: false",
+		"tags": ["entity-lifecycle", "dirty-checking", "merge", "lazy-initialization"],
+		"quiz": {
+			"options": [
+				"Entity ở trạng thái managed cần gọi `save()` tường minh thì thay đổi mới được ghi xuống database",
+				"`merge()` gắn chính object được truyền vào làm managed",
+				"`spring.jpa.open-in-view=true` là cách khắc phục đúng cho `LazyInitializationException`",
+				"Entity managed được ghi tự động nhờ dirty checking; `merge()` trả về một instance khác cần dùng thay cho object gốc"
+			],
+			"correct": 3,
+			"explanation": "Hibernate so sánh với snapshot lúc flush. `merge` copy trạng thái sang instance managed mới, và `open-in-view` giữ connection suốt request nên chỉ che giấu vấn đề."
+		}
+	},
+	{
+		"id": "spring-data-003",
+		"topic": "spring-data",
+		"difficulty": "medium",
+		"question": "Spring Data JPA repository hỗ trợ những cách viết truy vấn nào?",
+		"answerShort": "Derived query từ tên method (`findByStatusAndTotalGreaterThan`), `@Query` với JPQL hoặc SQL thuần, `Specification` cho truy vấn động, Querydsl, và `EntityManager` khi cần toàn quyền.",
+		"answerLong": "**1. Derived query** — Spring phân tích tên method thành truy vấn. Từ khoá: `And`, `Or`, `Between`, `LessThan`, `Like`, `In`, `IsNull`, `OrderBy`, `Top`/`First`, `Distinct`, `Containing`, `IgnoreCase`.\n\nƯu: không viết truy vấn, tự đổi theo refactor. Nhược: tên method dài ngoằng khi có nhiều điều kiện — quá 3 điều kiện thì nên chuyển sang `@Query`.\n\n**2. `@Query`** — JPQL (theo entity, độc lập database) hoặc `nativeQuery = true` (SQL thuần, dùng được tính năng riêng của database). Tham số đặt tên bằng `@Param` rõ ràng hơn đánh số vị trí. Truy vấn ghi cần `@Modifying` và **bỏ qua persistence context** — nên thêm `clearAutomatically = true` để tránh đọc phải dữ liệu cũ.\n\n**3. `Specification`** (JPA Criteria API) — truy vấn động, ghép điều kiện lúc chạy. An toàn kiểu, tổ hợp được bằng `and`/`or`. Cú pháp khá rườm rà.\n\n**4. Querydsl** — sinh metamodel lúc biên dịch, API fluent dễ đọc hơn `Specification` nhiều. Đổi lại phải cấu hình annotation processor.\n\n**5. Projection** — interface projection (khai báo getter, Spring sinh proxy) hoặc DTO projection (dùng constructor). Chỉ lấy cột cần nên nhanh hơn hẳn khi entity có nhiều field.\n\n**Cách chọn**: 1–3 điều kiện cố định → derived query. Phức tạp hơn hoặc cần join → `@Query`. Bộ lọc động do người dùng chọn → `Specification`/Querydsl. Màn hình chỉ đọc → projection.\n\n**Lưu ý**: `@Modifying` sinh SQL đi thẳng xuống database, không kích hoạt dirty checking, không cập nhật cache tầng một, và **không chạy** các callback vòng đời entity.",
+		"code": "// Derived query\nList<Order> findTop10ByStatusAndTotalGreaterThanOrderByCreatedAtDesc(OrderStatus s, BigDecimal min);\n\n// @Query + projection\n@Query(\"select new com.app.Stat(o.status, count(o)) from Order o group by o.status\")\nList<Stat> countByStatus();\n\n// Truy vấn ghi: xoá cache tầng một để lần đọc sau không lấy dữ liệu cũ\n@Modifying(clearAutomatically = true)\n@Query(\"update Order o set o.status = :s where o.createdAt < :d\")\nint expireOlderThan(@Param(\"s\") OrderStatus s, @Param(\"d\") Instant d);\n\n// Truy vấn động\nPage<Order> findAll(Specification<Order> spec, Pageable pageable);",
+		"tags": ["derived-query", "jpql", "specification", "projection"],
+		"quiz": {
+			"options": [
+				"Truy vấn `@Modifying` vẫn kích hoạt dirty checking và các callback vòng đời entity",
+				"Truy vấn `@Modifying` đi thẳng xuống database, bỏ qua persistence context nên nên dùng `clearAutomatically`",
+				"Derived query xử lý tốt mọi truy vấn động do người dùng cấu hình lúc chạy",
+				"Interface projection vẫn nạp toàn bộ cột của entity rồi mới lọc"
+			],
+			"correct": 1,
+			"explanation": "Truy vấn bulk bỏ qua persistence context nên cache tầng một có thể giữ dữ liệu cũ. Truy vấn động cần `Specification`/Querydsl, và projection chỉ lấy đúng cột được khai báo."
+		}
+	},
+	{
+		"id": "spring-data-004",
+		"topic": "spring-data",
+		"difficulty": "hard",
+		"question": "Optimistic locking và pessimistic locking khác nhau thế nào? Khi nào dùng loại nào?",
+		"answerShort": "Optimistic dùng cột `@Version`: không khoá gì, chỉ kiểm tra lúc ghi và ném `OptimisticLockException` nếu bị người khác sửa trước. Pessimistic khoá hàng ngay lúc đọc (`SELECT ... FOR UPDATE`), người khác phải chờ.",
+		"answerLong": "**Optimistic locking** — giả định xung đột hiếm. Entity có cột `@Version` (số hoặc timestamp). Mỗi `UPDATE` kèm điều kiện `WHERE version = ?` và tăng version lên. Nếu 0 dòng bị ảnh hưởng, nghĩa là có người sửa trước → `OptimisticLockingFailureException`.\n\n- Ưu: không khoá, throughput cao, không có nguy cơ deadlock.\n- Nhược: người dùng có thể mất công nhập liệu rồi bị báo lỗi. Ứng dụng phải xử lý retry hoặc hợp nhất thay đổi.\n- **Mặc định nên dùng** cho ứng dụng web — session dài, tỉ lệ xung đột thật sự thấp.\n\n**Pessimistic locking** — giả định xung đột thường xuyên. Khoá ngay lúc đọc:\n\n- `PESSIMISTIC_READ` — khoá chia sẻ, nhiều bên đọc được, không ai ghi.\n- `PESSIMISTIC_WRITE` — khoá độc quyền (`SELECT ... FOR UPDATE`).\n- `PESSIMISTIC_FORCE_INCREMENT` — khoá và tăng version.\n\n- Ưu: không bao giờ thất bại lúc ghi.\n- Nhược: giữ khoá database suốt transaction, giảm tính đồng thời, và có **nguy cơ deadlock**. **Bắt buộc đặt timeout**.\n- Dùng cho thao tác ngắn, tranh chấp cao và bắt buộc thành công: trừ tồn kho, chuyển tiền, cấp phát chỗ ngồi.\n\n**Ba lưu ý quan trọng**:\n\n1. **Optimistic lock chỉ hoạt động trong phạm vi ứng dụng.** Sửa trực tiếp bằng SQL bên ngoài mà không tăng version sẽ vô hiệu hoá nó.\n2. **Cập nhật bulk `@Modifying` không tự tăng version** — phải viết tay `set version = version + 1`.\n3. **Chiến lược retry**: bắt `OptimisticLockingFailureException`, nạp lại, áp lại thay đổi, thử lại có backoff. Giới hạn số lần thử.\n\n**Một lựa chọn thứ ba thường bị bỏ qua**: cập nhật nguyên tử ngay trong SQL (`UPDATE stock SET qty = qty - 1 WHERE id = ? AND qty >= 1`). Không cần khoá, không cần retry — và với những trường hợp đơn giản như trừ tồn kho, đây là cách tốt nhất.",
+		"code": "@Entity\npublic class Product {\n    @Id Long id;\n    @Version Long version;      // Hibernate tự quản lý\n    BigDecimal price;\n}\n\n// Pessimistic: LUÔN đặt timeout\n@Lock(LockModeType.PESSIMISTIC_WRITE)\n@QueryHints(@QueryHint(name = \"jakarta.persistence.lock.timeout\", value = \"3000\"))\n@Query(\"select s from Stock s where s.sku = :sku\")\nOptional<Stock> findForUpdate(@Param(\"sku\") String sku);\n\n// Thường tốt hơn cả hai: cập nhật nguyên tử bằng SQL\n@Modifying\n@Query(\"update Stock s set s.qty = s.qty - 1 where s.sku = :sku and s.qty >= 1\")\nint tryReserve(@Param(\"sku\") String sku);   // trả về 0 nghĩa là hết hàng",
+		"tags": ["optimistic-lock", "pessimistic-lock", "version", "concurrency"],
+		"quiz": {
+			"options": [
+				"Optimistic locking khoá hàng dữ liệu ngay tại thời điểm đọc",
+				"Pessimistic locking không bao giờ gây deadlock",
+				"Cập nhật bulk bằng `@Modifying` tự động tăng cột `@Version`",
+				"Optimistic locking chỉ kiểm tra lúc ghi qua cột `@Version`, nên ứng dụng phải xử lý retry khi xung đột"
+			],
+			"correct": 3,
+			"explanation": "Optimistic không khoá gì cả — nó phát hiện xung đột tại thời điểm `UPDATE`. Pessimistic **có** nguy cơ deadlock nên cần timeout, và truy vấn bulk phải tăng version thủ công."
+		}
+	},
+	{
+		"id": "spring-data-005",
+		"topic": "spring-data",
+		"difficulty": "medium",
+		"question": "Cache tầng một và tầng hai của Hibernate hoạt động thế nào?",
+		"answerShort": "Cache tầng một là persistence context — luôn bật, phạm vi một transaction, không tắt được. Cache tầng hai dùng chung cho cả `SessionFactory`, phải bật thủ công và cần cài đặt bên ngoài như Ehcache hay Caffeine.",
+		"answerLong": "**Cache tầng một (L1)**:\n\n- Chính là persistence context (`EntityManager`/`Session`).\n- **Luôn bật, không tắt được**, phạm vi một transaction.\n- `find()` cùng id hai lần trong một transaction chỉ đi database một lần.\n- Đảm bảo **identity**: trong một context, cùng một id luôn cho **cùng một instance Java** — nên `==` hoạt động đúng.\n- Xoá bằng `clear()` (toàn bộ) hoặc `detach(entity)`.\n- **Rủi ro thực tế**: xử lý hàng loạt sẽ tích luỹ toàn bộ entity trong context và gây `OutOfMemoryError`. Phải `flush()` và `clear()` định kỳ theo lô.\n\n**Cache tầng hai (L2)**:\n\n- Phạm vi `SessionFactory`, chia sẻ giữa mọi transaction và mọi thread.\n- Phải bật (`hibernate.cache.use_second_level_cache=true`) và cấp một provider (Ehcache, Caffeine, Hazelcast, Infinispan).\n- Đánh dấu từng entity bằng `@Cache(usage = ...)`.\n- Bốn chiến lược đồng thời: `READ_ONLY` (nhanh nhất, cho dữ liệu bất biến), `NONSTRICT_READ_WRITE`, `READ_WRITE` (dùng soft lock), `TRANSACTIONAL` (cần JTA).\n- **Query cache** là cơ chế riêng, phải bật thêm — và thường lợi bất cập hại vì nó bị vô hiệu hoá mỗi khi bất kỳ bảng liên quan nào thay đổi.\n\n**Khi nào L2 đáng dùng**: dữ liệu tham chiếu đọc nhiều ghi rất ít (danh mục, cấu hình, bảng mã). Với dữ liệu ghi thường xuyên, chi phí vô hiệu hoá cache thường lớn hơn lợi ích, và trong môi trường nhiều instance thì cache không nhất quán trở thành nguồn bug rất khó lần.\n\n**Cân nhắc thay thế**: nhiều đội chọn cache tường minh ở tầng service (`@Cacheable` của Spring, Redis) thay vì L2 — kiểm soát rõ ràng hơn về việc cái gì được cache và khi nào bị xoá.",
+		"code": "// Xử lý hàng loạt: flush và clear theo lô, nếu không sẽ hết bộ nhớ\nint batch = 50;\nfor (int i = 0; i < items.size(); i++) {\n    em.persist(items.get(i));\n    if (i % batch == 0) { em.flush(); em.clear(); }\n}\n\n// L2 chỉ cho dữ liệu tham chiếu đọc nhiều ghi ít\n@Entity\n@Cache(usage = CacheConcurrencyStrategy.READ_ONLY)\npublic class Country { @Id String code; String name; }",
+		"tags": ["first-level-cache", "second-level-cache", "persistence-context", "batch"],
+		"quiz": {
+			"options": [
+				"Cache tầng một là persistence context, luôn bật và có phạm vi một transaction",
+				"Cache tầng hai được bật mặc định trong Spring Boot",
+				"Cache tầng một có thể tắt để tiết kiệm bộ nhớ",
+				"Query cache luôn cải thiện hiệu năng và nên bật mặc định"
+			],
+			"correct": 0,
+			"explanation": "L1 không tắt được — nó là cơ chế nền của dirty checking và identity. L2 phải bật thủ công kèm provider, và query cache bị vô hiệu hoá mỗi khi bảng liên quan thay đổi."
+		}
+	},
+	{
+		"id": "spring-data-006",
+		"topic": "spring-data",
+		"difficulty": "medium",
+		"question": "Các kiểu quan hệ trong JPA và những cái bẫy khi ánh xạ?",
+		"answerShort": "`@OneToOne`, `@OneToMany`, `@ManyToOne`, `@ManyToMany`. Bẫy chính: `@ManyToOne`/`@OneToOne` mặc định là EAGER, quan hệ hai chiều cần đồng bộ cả hai phía, và `@ManyToMany` nên thay bằng hai `@OneToMany` qua entity trung gian.",
+		"answerLong": "**Phía sở hữu (owning side)** là phía có khoá ngoại và quyết định việc ghi. Phía kia đánh `mappedBy`. Sửa phía `mappedBy` mà không sửa phía sở hữu thì **không có gì được ghi xuống database** — đây là bug hay gặp nhất với quan hệ hai chiều.\n\n**Các bẫy chính**:\n\n1. **Mặc định fetch type không đồng nhất**: `@ManyToOne` và `@OneToOne` mặc định **EAGER**; `@OneToMany` và `@ManyToMany` mặc định LAZY. Nên đặt tường minh `fetch = LAZY` cho hai loại đầu.\n2. **`@OneToOne` lazy không hoạt động ở phía không sở hữu** — Hibernate phải truy vấn để biết nên đặt `null` hay proxy. Giải pháp: dùng khoá chính chung (`@MapsId`), hoặc mô hình hoá lại thành `@ManyToOne`.\n3. **Quan hệ hai chiều cần method tiện ích** để đồng bộ cả hai đầu, nếu không object trong bộ nhớ sẽ lệch với database cho tới lần nạp lại.\n4. **`@ManyToMany` gần như luôn là sai lầm** — bảng nối không mang thêm thuộc tính nào được (ngày thêm, vai trò, số lượng), mà nhu cầu đó gần như luôn xuất hiện sau vài tháng. Hãy tách thành entity trung gian với hai `@ManyToOne` ngay từ đầu.\n5. **`CascadeType.REMOVE` và `orphanRemoval`**: `orphanRemoval = true` xoá con khi nó bị gỡ khỏi collection. `CascadeType.ALL` trên `@ManyToOne` là nguy hiểm — xoá một đơn hàng có thể xoá luôn khách hàng.\n6. **`equals`/`hashCode` cho entity**: đừng dùng id sinh tự động (nó là `null` trước khi persist, làm hỏng `HashSet`). Dùng khoá nghiệp vụ, hoặc UUID sinh ở phía ứng dụng.",
+		"code": "@Entity\npublic class Order {\n    @ManyToOne(fetch = FetchType.LAZY)   // đặt tường minh: mặc định là EAGER\n    @JoinColumn(name = \"customer_id\")\n    private Customer customer;\n\n    @OneToMany(mappedBy = \"order\", cascade = CascadeType.ALL, orphanRemoval = true)\n    private List<OrderLine> lines = new ArrayList<>();\n\n    public void addLine(OrderLine l) {   // đồng bộ cả hai phía\n        lines.add(l);\n        l.setOrder(this);\n    }\n}",
+		"tags": ["relationship", "fetchtype", "mappedby", "cascade"],
+		"quiz": {
+			"options": [
+				"`@OneToMany` mặc định là EAGER còn `@ManyToOne` mặc định là LAZY",
+				"Sửa phía `mappedBy` là đủ để thay đổi được ghi xuống database",
+				"`@ManyToOne` và `@OneToOne` mặc định là EAGER; phía sở hữu (có khoá ngoại) mới quyết định việc ghi",
+				"`@ManyToMany` là lựa chọn tốt nhất cho mọi quan hệ nhiều-nhiều"
+			],
+			"correct": 2,
+			"explanation": "Mặc định fetch type ngược với trực giác của nhiều người. Chỉ phía sở hữu ghi khoá ngoại, và `@ManyToMany` không cho phép bảng nối mang thuộc tính bổ sung."
+		}
+	},
+	{
+		"id": "spring-data-007",
+		"topic": "spring-data",
+		"difficulty": "medium",
+		"question": "Chiến lược sinh khoá chính trong JPA? Cái nào phù hợp với batch insert?",
+		"answerShort": "`IDENTITY` (auto-increment), `SEQUENCE` (sequence của database), `TABLE` (bảng riêng), `AUTO`. `SEQUENCE` là lựa chọn tốt nhất — `IDENTITY` **vô hiệu hoá batch insert** của JDBC vì Hibernate phải lấy id ngay sau mỗi lần chèn.",
+		"answerLong": "| Chiến lược | Cơ chế | Batch insert |\n|---|---|---|\n| `IDENTITY` | cột auto-increment | **không được** |\n| `SEQUENCE` | sequence của database | **được**, có allocation size |\n| `TABLE` | bảng đếm riêng | được, nhưng chậm và dễ tranh chấp |\n| `AUTO` | provider tự chọn | tuỳ database |\n\n**Vì sao `IDENTITY` chặn batch insert**: giá trị id chỉ tồn tại **sau** khi hàng được chèn. Hibernate cần id ngay để đưa entity vào persistence context, nên nó buộc phải thực thi `INSERT` từng dòng một, không gom lô được. Với 10.000 dòng, đây là khác biệt giữa vài giây và vài phút.\n\n**`SEQUENCE` với `allocationSize`**: Hibernate lấy trước một khối id (mặc định 50) rồi cấp phát trong bộ nhớ, giảm số lần gọi sequence xuống 50 lần. Ràng buộc: `allocationSize` trong code phải khớp `INCREMENT BY` của sequence trong database, nếu không sẽ trùng khoá.\n\n**MySQL không có sequence thật** (trước 8.0 thì hoàn toàn không) — thường buộc phải dùng `IDENTITY`. PostgreSQL, Oracle, H2 đều hỗ trợ sequence tốt.\n\n**UUID làm khoá chính**: sinh được ở phía ứng dụng (không cần đi database, batch insert thoải mái, ghép dữ liệu từ nhiều nguồn dễ), nhưng UUIDv4 ngẫu nhiên làm phân mảnh index B-tree nghiêm trọng. Dùng **UUIDv7** (có thứ tự theo thời gian) hoặc ULID để có cả hai ưu điểm.\n\n**Bật batch insert thật sự** cần cấu hình thêm — chỉ đổi sang `SEQUENCE` là chưa đủ.",
+		"code": "@Entity\npublic class Order {\n    @Id\n    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = \"order_seq\")\n    @SequenceGenerator(name = \"order_seq\", sequenceName = \"order_id_seq\", allocationSize = 50)\n    private Long id;\n}\n\n# Bật batch insert (phải khớp với chiến lược SEQUENCE)\nspring.jpa.properties:\n  hibernate.jdbc.batch_size: 50\n  hibernate.order_inserts: true\n  hibernate.order_updates: true",
+		"tags": ["primary-key", "sequence", "identity", "batch-insert"],
+		"quiz": {
+			"options": [
+				"`GenerationType.IDENTITY` vô hiệu hoá batch insert vì Hibernate cần id ngay sau mỗi lần chèn",
+				"`GenerationType.SEQUENCE` không dùng được với batch insert",
+				"UUIDv4 ngẫu nhiên là khoá chính lý tưởng cho index B-tree",
+				"`allocationSize` trong code không cần khớp với `INCREMENT BY` của sequence"
+			],
+			"correct": 0,
+			"explanation": "Id của `IDENTITY` chỉ có sau khi chèn nên không gom lô được. UUIDv4 gây phân mảnh index — nên dùng UUIDv7, và `allocationSize` phải khớp sequence nếu không sẽ trùng khoá."
+		}
+	},
+	{
+		"id": "spring-data-008",
+		"topic": "spring-data",
+		"difficulty": "hard",
+		"question": "Connection pool hoạt động thế nào? Đặt kích thước pool bao nhiêu là hợp lý?",
+		"answerShort": "Pool giữ sẵn connection để tránh chi phí bắt tay TCP và xác thực mỗi lần truy vấn. HikariCP là mặc định của Spring Boot. Pool **nhỏ thường nhanh hơn pool lớn** — công thức tham khảo: `connections = (số nhân × 2) + số đĩa`.",
+		"answerLong": "**Vì sao cần pool**: mở một connection tốn hàng chục mili giây (bắt tay TCP, TLS, xác thực, thiết lập phiên). Pool giữ sẵn và cho mượn.\n\n**Vì sao pool nhỏ lại nhanh hơn** — điều phản trực giác nhất về cấu hình pool: database chỉ thực sự song song được tới giới hạn của CPU và đĩa. Thêm connection quá mức chỉ tạo tranh chấp khoá, chuyển ngữ cảnh, và bùng nổ bộ nhớ phía server. Wiki của HikariCP có ví dụ nổi tiếng: giảm pool từ 2048 xuống **96** làm thời gian phản hồi giảm từ 100ms xuống 2ms.\n\n**Công thức tham khảo** (PostgreSQL wiki): `connections = ((số nhân × 2) + số đĩa hiệu dụng)`. Máy 4 nhân với SSD → khoảng 9–10 connection. Với đa số microservice, giá trị mặc định 10 của Hikari là hợp lý; **tăng lên là quyết định cần dữ liệu chứng minh**.\n\n**Các thông số quan trọng của Hikari**:\n\n| Thông số | Ý nghĩa |\n|---|---|\n| `maximum-pool-size` | mặc định 10 |\n| `minimum-idle` | nên đặt **bằng** max để pool cố định, tránh dao động |\n| `connection-timeout` | chờ tối đa để mượn (mặc định 30s — thường nên giảm) |\n| `max-lifetime` | phải **nhỏ hơn** timeout của database/firewall |\n| `leak-detection-threshold` | cảnh báo khi connection bị giữ quá lâu — rất hữu ích |\n\n**Các sự cố thường gặp**:\n\n1. **Cạn pool** — thường do connection bị rò rỉ (không đóng), hoặc `@Transactional` bao quanh một lời gọi HTTP chậm. Bật `leak-detection-threshold` để phát hiện.\n2. **`max-lifetime` lớn hơn timeout của database** → mượn phải connection đã chết. Đặt nhỏ hơn vài chục giây.\n3. **Tổng số connection từ mọi instance vượt `max_connections` của database** — 20 pod × 10 connection = 200, dễ vượt giới hạn mặc định của PostgreSQL (100). Cân nhắc PgBouncer khi số instance lớn.\n4. **`REQUIRES_NEW`** chiếm connection thứ hai trong cùng một luồng — có thể tự deadlock khi pool cạn.",
+		"code": "spring.datasource.hikari:\n  maximum-pool-size: 10\n  minimum-idle: 10            # bằng max -> pool cố định, không dao động\n  connection-timeout: 3000    # fail fast thay vì treo 30 giây\n  max-lifetime: 1200000       # 20 phút, nhỏ hơn timeout của database\n  leak-detection-threshold: 20000\n\n// Phản mẫu: giữ connection trong lúc gọi HTTP bên ngoài\n@Transactional\npublic void bad(Order o) {\n    repo.save(o);\n    httpClient.notifyPartner(o);   // giữ connection suốt thời gian chờ mạng\n}",
+		"tags": ["connection-pool", "hikaricp", "sizing", "leak-detection"],
+		"quiz": {
+			"options": [
+				"Tăng `maximum-pool-size` càng lớn thì throughput càng cao",
+				"`max-lifetime` nên đặt lớn hơn timeout của database để tiết kiệm chi phí tạo connection",
+				"Pool nhỏ thường cho thời gian phản hồi tốt hơn pool lớn, vì database chỉ song song được tới giới hạn CPU và đĩa",
+				"Gọi HTTP bên ngoài bên trong `@Transactional` không ảnh hưởng tới connection pool"
+			],
+			"correct": 2,
+			"explanation": "Pool quá lớn gây tranh chấp và chuyển ngữ cảnh. `max-lifetime` phải **nhỏ hơn** timeout của database để không mượn phải connection đã chết, và giữ connection khi chờ mạng là nguyên nhân cạn pool phổ biến."
+		}
+	}
+]

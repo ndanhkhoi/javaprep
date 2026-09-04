@@ -1,0 +1,277 @@
+[
+	{
+		"id": "collections-001",
+		"topic": "collections",
+		"difficulty": "medium",
+		"question": "`HashMap` hoạt động thế nào bên trong? Điều gì xảy ra khi hai key bị đụng độ hash?",
+		"answerShort": "Mảng bucket + hàm băm. Đụng độ được nối thành danh sách liên kết trong cùng bucket; từ Java 8, bucket có ≥ 8 phần tử (và bảng ≥ 64) sẽ chuyển thành cây đỏ-đen, đưa tra cứu xấu nhất từ O(n) về O(log n).",
+		"answerLong": "**Cấu trúc**: `Node<K,V>[] table`, mỗi ô gọi là bucket. Vị trí bucket = `(n - 1) & hash` với `n` là độ dài bảng (luôn là luỹ thừa của 2, nên phép AND thay được cho phép chia dư).\n\n**Hàm spread**: `HashMap` không dùng thẳng `key.hashCode()` mà trộn: `h ^ (h >>> 16)`. Vì bảng nhỏ chỉ dùng vài bit thấp của hash, việc XOR 16 bit cao xuống làm các bit cao cũng tham gia chọn bucket — giảm mạnh đụng độ với những `hashCode()` chỉ khác nhau ở bit cao.\n\n**Quy trình `put`**:\n1. Tính hash → tìm bucket.\n2. Bucket rỗng → tạo `Node` mới.\n3. Bucket có phần tử → duyệt, so sánh bằng `hash == && (key == || key.equals())`. Trùng thì thay value, không thì nối vào cuối.\n4. Nếu chuỗi đạt `TREEIFY_THRESHOLD = 8` **và** `table.length >= MIN_TREEIFY_CAPACITY = 64` → chuyển bucket thành cây đỏ-đen. Nếu bảng còn nhỏ hơn 64 thì resize thay vì treeify.\n5. `++size > threshold` (= capacity × loadFactor, mặc định 0.75) → resize gấp đôi và rehash.\n\n**Vì sao 0.75**: cân bằng giữa lãng phí bộ nhớ (load factor thấp) và tăng đụng độ (load factor cao). Với phân phối Poisson, xác suất một bucket có 8 phần tử ở load factor 0.75 là khoảng 6×10⁻⁸ — nên treeify hiếm khi kích hoạt nếu `hashCode()` được viết tử tế.\n\n**Độ phức tạp**: trung bình O(1); xấu nhất O(log n) nhờ treeify (trước Java 8 là O(n) — từng bị khai thác thành tấn công DoS bằng cách gửi hàng loạt key đụng độ).",
+		"code": "// java.util.HashMap (JDK 21)\nstatic final int hash(Object key) {\n    int h;\n    return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);\n}\n\nstatic final int TREEIFY_THRESHOLD = 8;\nstatic final int UNTREEIFY_THRESHOLD = 6;   // có hysteresis để tránh dao động\nstatic final int MIN_TREEIFY_CAPACITY = 64;",
+		"tags": [
+			"hashmap",
+			"hashing",
+			"treeify",
+			"collision"
+		],
+		"quiz": {
+			"options": [
+				"Khi hai key đụng độ hash, `HashMap` ghi đè entry cũ",
+				"Bucket luôn được lưu dưới dạng danh sách liên kết, kể cả khi có rất nhiều phần tử",
+				"Bucket chuyển sang cây đỏ-đen khi có từ 8 phần tử và bảng đã đạt ít nhất 64 ô",
+				"`HashMap` dùng thẳng giá trị `key.hashCode()` để chọn bucket"
+			],
+			"correct": 2,
+			"explanation": "Cả hai điều kiện phải cùng đúng: chuỗi ≥ 8 **và** `table.length` ≥ 64. Nếu bảng còn nhỏ, `HashMap` chọn resize thay vì treeify. Hash cũng được trộn thêm `h ^ (h >>> 16)`."
+		}
+	},
+	{
+		"id": "collections-002",
+		"topic": "collections",
+		"difficulty": "easy",
+		"question": "`ArrayList` và `LinkedList` khác nhau thế nào? Trong thực tế nên chọn cái nào?",
+		"answerShort": "`ArrayList` là mảng động: truy cập theo chỉ số O(1), chèn/xoá giữa O(n). `LinkedList` là danh sách nối đôi: chèn/xoá tại con trỏ O(1) nhưng `get(i)` là O(n). Thực tế gần như luôn chọn `ArrayList`.",
+		"answerLong": "| Thao tác | `ArrayList` | `LinkedList` |\n|---|---|---|\n| `get(i)` | O(1) | O(n) |\n| `add(e)` cuối | O(1) khấu hao | O(1) |\n| `add(0, e)` | O(n) | O(1) |\n| `remove(i)` | O(n) | O(n) tìm + O(1) nối |\n| Bộ nhớ mỗi phần tử | 1 reference | 1 node = 3 reference + header |\n\nBảng độ phức tạp nói `LinkedList` thắng ở chèn đầu, nhưng thực tế **hiếm khi** đúng vì:\n\n1. **Cache locality**: `ArrayList` lưu liên tục trong bộ nhớ, đọc rất thân thiện với CPU cache. `LinkedList` rải node khắp heap — mỗi bước duyệt là một cache miss.\n2. Chèn/xoá ở giữa `LinkedList` vẫn phải **duyệt tới vị trí đó** trước — O(n), mất luôn ưu thế lý thuyết.\n3. `ArrayList` dùng `System.arraycopy` (intrinsic, được JIT dịch thành lệnh vector) nên dịch phần tử nhanh hơn hằng số rất nhiều so với hình dung.\n4. `LinkedList` tốn ~3–4× bộ nhớ và tạo áp lực GC lớn hơn.\n\n**Kết luận thực dụng**: mặc định `ArrayList`. Cần queue/deque thì dùng `ArrayDeque` — nhanh hơn `LinkedList` ở mọi mặt. `LinkedList` chỉ còn hợp lý khi cần `ListIterator` để chèn/xoá liên tục trong lúc duyệt.\n\n**Mẹo**: nếu biết trước kích thước, khởi tạo `new ArrayList<>(expectedSize)` để tránh chuỗi resize (mỗi lần grow là 1.5× và copy toàn bộ).",
+		"code": "// Cần queue hoặc stack: ArrayDeque, không phải LinkedList hay Stack\nDeque<Task> queue = new ArrayDeque<>();\nqueue.addLast(task);\nTask next = queue.pollFirst();\n\n// Biết trước kích thước -> tránh resize\nList<Row> rows = new ArrayList<>(expectedCount);",
+		"tags": [
+			"arraylist",
+			"linkedlist",
+			"arraydeque",
+			"performance"
+		],
+		"quiz": {
+			"options": [
+				"`LinkedList.get(i)` có độ phức tạp O(1) như `ArrayList`",
+				"`LinkedList` luôn nhanh hơn `ArrayList` khi chèn vào giữa danh sách",
+				"`ArrayList` thường nhanh hơn trong thực tế nhờ cache locality, dù lý thuyết thua ở chèn đầu",
+				"`ArrayList` không cho phép chèn phần tử vào đầu danh sách"
+			],
+			"correct": 2,
+			"explanation": "`LinkedList` phải duyệt tới vị trí chèn nên vẫn O(n), lại thêm cache miss ở mỗi node. `ArrayList` dịch phần tử bằng `System.arraycopy` rất nhanh."
+		}
+	},
+	{
+		"id": "collections-003",
+		"topic": "collections",
+		"difficulty": "medium",
+		"question": "Fail-fast và fail-safe iterator khác nhau thế nào?",
+		"answerShort": "Fail-fast (`ArrayList`, `HashMap`) kiểm tra `modCount` và ném `ConcurrentModificationException` khi bị sửa lúc duyệt. Fail-safe (`CopyOnWriteArrayList`) duyệt trên snapshot nên không ném, đổi lại có thể thấy dữ liệu cũ.",
+		"answerLong": "**Fail-fast**: mỗi collection giữ biến đếm `modCount`, tăng mỗi lần cấu trúc thay đổi. Iterator ghi lại `expectedModCount` lúc tạo và so sánh ở mỗi `next()`. Lệch nhau → `ConcurrentModificationException`.\n\nĐiểm quan trọng: đây là cơ chế **phát hiện lỗi trên tinh thần nỗ lực tối đa**, không phải bảo đảm. Javadoc nói rõ không được dựa vào nó để đảm bảo tính đúng đắn — trong môi trường đa luồng nó có thể không phát hiện được.\n\nBẫy hay gặp nhất: `for (String s : list) if (cond) list.remove(s);` — ném CME. Cách đúng:\n\n- `iterator.remove()` (nó cập nhật `expectedModCount`).\n- `list.removeIf(predicate)` — gọn nhất từ Java 8.\n- Gom vào list phụ rồi `removeAll` sau khi duyệt xong.\n\nLưu ý: xoá phần tử **áp chót** trong `ArrayList` bằng for-each lại **không** ném CME — `hasNext()` chỉ so `cursor != size`, và sau khi xoá thì chúng tình cờ bằng nhau nên vòng lặp kết thúc sớm. Đây chính là lý do không nên coi CME là mạng lưới an toàn.\n\n**Fail-safe** (đúng hơn là *weakly consistent*): `CopyOnWriteArrayList` duyệt trên snapshot của mảng tại thời điểm tạo iterator — sửa sau đó không thấy được, và `iterator.remove()` bị cấm. `ConcurrentHashMap` cho iterator weakly consistent: không ném CME, phản ánh **một số** thay đổi xảy ra sau khi bắt đầu duyệt, và mỗi phần tử được trả về đúng một lần.",
+		"code": "// Ném ConcurrentModificationException\nfor (String s : list) {\n    if (s.isBlank()) list.remove(s);\n}\n\n// Đúng — cách 1\nIterator<String> it = list.iterator();\nwhile (it.hasNext()) if (it.next().isBlank()) it.remove();\n\n// Đúng — cách 2, gọn nhất\nlist.removeIf(String::isBlank);",
+		"tags": [
+			"iterator",
+			"fail-fast",
+			"concurrentmodification",
+			"modcount"
+		],
+		"quiz": {
+			"options": [
+				"`ConcurrentModificationException` là bảo đảm chắc chắn phát hiện mọi sửa đổi đồng thời",
+				"Fail-fast iterator so sánh `modCount` và ném ngoại lệ trên tinh thần nỗ lực tối đa",
+				"`CopyOnWriteArrayList` ném `ConcurrentModificationException` khi bị sửa trong lúc duyệt",
+				"Gọi `list.remove(x)` bên trong vòng for-each là cách xoá phần tử đúng chuẩn"
+			],
+			"correct": 1,
+			"explanation": "Javadoc nói rõ fail-fast chỉ là best-effort, không được dựa vào để bảo đảm tính đúng. `CopyOnWriteArrayList` duyệt trên snapshot nên không bao giờ ném CME."
+		}
+	},
+	{
+		"id": "collections-004",
+		"topic": "collections",
+		"difficulty": "medium",
+		"question": "`HashMap`, `LinkedHashMap` và `TreeMap` khác nhau ở điểm nào?",
+		"answerShort": "`HashMap`: không đảm bảo thứ tự, O(1). `LinkedHashMap`: giữ thứ tự chèn (hoặc thứ tự truy cập — nền tảng của LRU cache), O(1). `TreeMap`: sắp xếp theo key, O(log n), có API tìm khoảng.",
+		"answerLong": "**`HashMap`** — nhanh nhất, thứ tự duyệt không xác định và **có thể đổi giữa các phiên bản JDK**. Không bao giờ viết code phụ thuộc vào thứ tự của nó. Cho phép một key `null`.\n\n**`LinkedHashMap`** — `HashMap` + danh sách nối đôi xuyên qua các entry. Chi phí thêm khoảng 2 reference mỗi entry, đổi lấy thứ tự duyệt ổn định. Constructor có tham số `accessOrder`; đặt `true` cộng với override `removeEldestEntry` là có ngay một **LRU cache** chỉ trong vài dòng.\n\n**`TreeMap`** — cây đỏ-đen, key luôn được sắp xếp theo `Comparable` hoặc `Comparator` cấp cho constructor. Mọi thao tác O(log n). Đổi lại có `NavigableMap` API rất mạnh: `firstKey`, `floorKey`, `ceilingKey`, `headMap`, `tailMap`, `subMap`. **Không** cho phép key `null` (phải so sánh được).\n\nChọn thế nào:\n\n- Chỉ cần tra cứu → `HashMap`.\n- Cần duyệt theo thứ tự chèn, hoặc cần LRU → `LinkedHashMap`.\n- Cần key sắp xếp, hoặc truy vấn theo khoảng/lân cận → `TreeMap`.\n- Đa luồng → `ConcurrentHashMap` (hoặc `ConcurrentSkipListMap` nếu cần sắp xếp).",
+		"code": "// LRU cache trong 6 dòng\nMap<String, byte[]> lru = new LinkedHashMap<>(16, 0.75f, true) {\n    @Override protected boolean removeEldestEntry(Map.Entry<String, byte[]> eldest) {\n        return size() > 100;\n    }\n};\n\n// Truy vấn theo khoảng — chỉ TreeMap làm được\nNavigableMap<LocalDate, Price> prices = new TreeMap<>();\nPrice atOrBefore = prices.floorEntry(LocalDate.now()).getValue();",
+		"tags": [
+			"hashmap",
+			"linkedhashmap",
+			"treemap",
+			"lru"
+		],
+		"quiz": {
+			"options": [
+				"`HashMap` đảm bảo duyệt theo thứ tự chèn phần tử",
+				"`TreeMap` cho phép một key `null` giống `HashMap`",
+				"`LinkedHashMap` với `accessOrder = true` là nền tảng để cài LRU cache",
+				"`TreeMap` có độ phức tạp tra cứu O(1)"
+			],
+			"correct": 2,
+			"explanation": "`accessOrder = true` đưa entry vừa truy cập xuống cuối danh sách; kết hợp `removeEldestEntry` là có LRU. `TreeMap` là cây đỏ-đen nên O(log n) và không nhận key `null`."
+		}
+	},
+	{
+		"id": "collections-005",
+		"topic": "collections",
+		"difficulty": "medium",
+		"question": "`ConcurrentHashMap` khác `Hashtable` và `Collections.synchronizedMap()` thế nào?",
+		"answerShort": "`Hashtable` và `synchronizedMap` khoá toàn bộ map cho mọi thao tác. `ConcurrentHashMap` chỉ khoá bucket đang ghi (CAS + `synchronized` trên node đầu), nên đọc gần như không khoá và ghi song song được.",
+		"answerLong": "**`Hashtable`** (legacy từ JDK 1.0): mọi method `synchronized` trên chính object map. Một thread ghi thì toàn bộ thread khác phải chờ, kể cả khi đọc. Không dùng trong code mới.\n\n**`Collections.synchronizedMap(map)`**: wrapper bọc mỗi method trong `synchronized`. Vẫn là một khoá duy nhất cho cả map. Ngoài ra, duyệt **bắt buộc** phải tự đồng bộ thủ công — điều mà hầu hết người dùng quên.\n\n**`ConcurrentHashMap`** (Java 8+): bỏ hoàn toàn khái niệm segment của Java 7. Cơ chế hiện nay:\n\n- Ghi vào bucket rỗng: CAS, không khoá gì cả.\n- Ghi vào bucket đã có: `synchronized` trên **node đầu của bucket đó** — các bucket khác vẫn ghi song song bình thường.\n- Đọc: hoàn toàn không khoá; field `val` và `next` là `volatile`.\n- `size()` được duy trì bằng một mảng counter cell kiểu `LongAdder` để tránh tranh chấp trên một biến duy nhất — vì thế `size()` là **ước lượng**, không phải snapshot chính xác.\n- Không cho phép key hay value `null`. Lý do: `map.get(k) == null` sẽ nhập nhằng giữa \"không có key\" và \"có key với value null\", mà trong môi trường đa luồng không thể phân giải bằng `containsKey`.\n\n**Điểm mấu chốt về tính atomic**: `synchronizedMap` chỉ làm **từng lời gọi** atomic, không làm cả chuỗi atomic. `if (!map.containsKey(k)) map.put(k, v)` vẫn có race. Dùng các method atomic hợp thành của `ConcurrentHashMap`: `putIfAbsent`, `computeIfAbsent`, `compute`, `merge`.",
+		"code": "// Có race dù map đã được đồng bộ\nif (!map.containsKey(key)) map.put(key, expensive());\n\n// Atomic thật sự\nmap.computeIfAbsent(key, k -> expensive());\nmap.merge(key, 1, Integer::sum);   // đếm tần suất an toàn\n\n// Lưu ý: hàm truyền vào computeIfAbsent chạy khi đang giữ khoá bucket\n// -> không được gọi lại chính map đó bên trong, sẽ deadlock.",
+		"tags": [
+			"concurrenthashmap",
+			"hashtable",
+			"thread-safety",
+			"atomic"
+		],
+		"quiz": {
+			"options": [
+				"`ConcurrentHashMap` cho phép value `null` giống `HashMap`",
+				"`Collections.synchronizedMap` làm cho chuỗi `containsKey` rồi `put` trở nên atomic",
+				"`ConcurrentHashMap` chỉ khoá node đầu của bucket đang ghi, còn thao tác đọc không khoá",
+				"`Hashtable` có hiệu năng cao hơn `ConcurrentHashMap` khi nhiều thread ghi"
+			],
+			"correct": 2,
+			"explanation": "Đồng bộ từng method không làm cả chuỗi thao tác atomic — phải dùng `computeIfAbsent`/`merge`. `ConcurrentHashMap` cấm `null` để `get()` trả `null` có nghĩa duy nhất."
+		}
+	},
+	{
+		"id": "collections-006",
+		"topic": "collections",
+		"difficulty": "easy",
+		"question": "`Set` được cài đặt thế nào? `HashSet`, `LinkedHashSet` và `TreeSet` khác nhau ra sao?",
+		"answerShort": "`HashSet` bọc một `HashMap` với value là object hằng dùng chung. `LinkedHashSet` giữ thứ tự chèn. `TreeSet` sắp xếp, O(log n), có API `NavigableSet` để truy vấn khoảng.",
+		"answerLong": "**Cài đặt**: `HashSet` thật ra chỉ là một `HashMap<E, Object>` với mọi value trỏ tới cùng một object `PRESENT` tĩnh. `add(e)` chính là `map.put(e, PRESENT) == null`. Vì vậy mọi đặc tính về hash, đụng độ, treeify, load factor của `HashMap` đều áp dụng nguyên vẹn cho `HashSet`.\n\n| | thứ tự | độ phức tạp | cho phép null |\n|---|---|---|---|\n| `HashSet` | không xác định | O(1) | 1 phần tử null |\n| `LinkedHashSet` | thứ tự chèn | O(1) | 1 phần tử null |\n| `TreeSet` | sắp xếp | O(log n) | không |\n\n**Hệ quả quan trọng**: phần tử phải có `hashCode()`/`equals()` đúng đắn, và **không được thay đổi** sau khi thêm vào set. Sửa field tham gia `hashCode()` khiến phần tử nằm sai bucket — `contains()` trả `false` cho chính object đang nằm bên trong, và `remove()` không xoá được. Đây là dạng \"rò rỉ bộ nhớ logic\" rất khó lần ra.\n\n**`TreeSet`** xác định trùng lặp bằng `compareTo`/`compare` trả 0, **không** dùng `equals()`. Nếu hai thứ không nhất quán, set sẽ hành xử khác với trực giác.\n\nMẹo hiệu năng: `new HashSet<>(collection)` khởi tạo capacity là `max(16, size/0.75 + 1)`, tránh được rehash — luôn tốt hơn tạo rỗng rồi `addAll` từng phần tử.",
+		"code": "// java.util.HashSet\nprivate static final Object PRESENT = new Object();\npublic boolean add(E e) { return map.put(e, PRESENT) == null; }\n\n// Bẫy: sửa field tham gia hashCode sau khi đã thêm vào set\nSet<User> set = new HashSet<>();\nUser u = new User(\"a\");\nset.add(u);\nu.setName(\"b\");\nSystem.out.println(set.contains(u)); // false — nằm sai bucket",
+		"tags": [
+			"hashset",
+			"treeset",
+			"linkedhashset",
+			"hashcode"
+		],
+		"quiz": {
+			"options": [
+				"`HashSet` được cài đặt bằng một mảng riêng, không liên quan tới `HashMap`",
+				"`TreeSet` xác định phần tử trùng lặp bằng `equals()`",
+				"Sửa field tham gia `hashCode()` sau khi thêm vào `HashSet` khiến `contains()` trả về `false`",
+				"`LinkedHashSet` sắp xếp phần tử theo thứ tự tự nhiên"
+			],
+			"correct": 2,
+			"explanation": "Phần tử nằm ở bucket tính theo hash lúc thêm; đổi hash rồi thì tra cứu nhìn sang bucket khác. `TreeSet` so trùng bằng `compare() == 0`, còn `LinkedHashSet` giữ thứ tự chèn."
+		}
+	},
+	{
+		"id": "collections-007",
+		"topic": "collections",
+		"difficulty": "medium",
+		"question": "`Iterator`, `ListIterator` và `Iterable` khác nhau chỗ nào?",
+		"answerShort": "`Iterable` là thứ **có thể duyệt** (`iterator()`), cho phép dùng for-each. `Iterator` là con trỏ duyệt một chiều, có `remove()`. `ListIterator` chỉ dành cho `List`: duyệt được hai chiều và thêm/sửa được tại vị trí.",
+		"answerLong": "**`Iterable<T>`** — một method `iterator()`. Bất kỳ class nào implement nó đều dùng được trong `for (T x : obj)`. Compiler dịch for-each thành vòng while trên iterator. Java 8 thêm `default void forEach(Consumer)`.\n\n**`Iterator<T>`** — `hasNext()`, `next()`, `default remove()`, `default forEachRemaining()`. Chỉ đi một chiều, dùng một lần. `remove()` là **cách duy nhất** xoá phần tử an toàn trong lúc duyệt, vì nó đồng bộ lại `expectedModCount`.\n\n**`ListIterator<T>`** — mở rộng `Iterator`, chỉ có trên `List`. Thêm `hasPrevious()`, `previous()`, `nextIndex()`, `set(e)` (thay phần tử vừa trả về), `add(e)` (chèn tại vị trí con trỏ). Lấy bằng `list.listIterator()` hoặc `list.listIterator(index)`.\n\n**Với `Map`**: `Map` không phải `Iterable`. Duyệt qua view: `entrySet()`, `keySet()`, `values()`. Luôn ưu tiên `entrySet()` khi cần cả key lẫn value — `keySet()` rồi `get(k)` phải băm lại mỗi vòng, tốn gấp đôi.\n\nGhi nhớ: `next()` khi hết phần tử ném `NoSuchElementException`; gọi `remove()` mà chưa gọi `next()` (hoặc gọi hai lần liên tiếp) ném `IllegalStateException`.",
+		"code": "// Sửa phần tử tại chỗ trong lúc duyệt — chỉ ListIterator làm được\nListIterator<String> it = list.listIterator();\nwhile (it.hasNext()) {\n    String s = it.next();\n    if (s.isBlank()) it.remove();\n    else it.set(s.trim());\n}\n\n// Duyệt Map: entrySet() thay vì keySet() + get()\nfor (Map.Entry<String, Integer> e : map.entrySet()) {\n    System.out.println(e.getKey() + \"=\" + e.getValue());\n}",
+		"tags": [
+			"iterator",
+			"listiterator",
+			"iterable",
+			"foreach"
+		],
+		"quiz": {
+			"options": [
+				"`Map` implement `Iterable` nên dùng trực tiếp trong vòng for-each được",
+				"`ListIterator` cho phép duyệt hai chiều và thêm/sửa phần tử tại vị trí con trỏ",
+				"`Iterator.remove()` có thể gọi nhiều lần liên tiếp sau một lần `next()`",
+				"`Iterable` bắt buộc phải cài đặt cả `hasNext()` và `next()`"
+			],
+			"correct": 1,
+			"explanation": "`Map` không phải `Iterable` — phải qua `entrySet()`. Gọi `remove()` hai lần liên tiếp ném `IllegalStateException`. `Iterable` chỉ yêu cầu method `iterator()`."
+		}
+	},
+	{
+		"id": "collections-008",
+		"topic": "collections",
+		"difficulty": "hard",
+		"question": "Vì sao capacity của `HashMap` luôn là luỹ thừa của 2, và load factor mặc định là 0.75?",
+		"answerShort": "Luỹ thừa của 2 cho phép thay `hash % n` bằng `hash & (n - 1)` — nhanh hơn nhiều — và khi resize mỗi phần tử chỉ ở nguyên chỗ hoặc dời đúng `oldCap` ô. 0.75 là điểm cân bằng giữa bộ nhớ và tỉ lệ đụng độ.",
+		"answerLong": "**Vì sao luỹ thừa của 2**\n\n1. `index = hash & (n - 1)` tương đương `hash % n` khi `n` là luỹ thừa của 2, nhưng phép AND nhanh hơn phép chia dư đáng kể.\n2. Khi resize gấp đôi, bit quyết định chỉ là **một bit mới**: `hash & oldCap`. Bit đó bằng 0 thì phần tử ở nguyên chỉ số cũ, bằng 1 thì dời sang `index + oldCap`. Nhờ vậy `HashMap` tách được mỗi chuỗi bucket thành hai chuỗi (`lo`/`hi`) mà **không cần tính lại hash** cho từng phần tử.\n3. `tableSizeFor()` làm tròn capacity truyền vào lên luỹ thừa của 2 gần nhất — nên `new HashMap<>(1000)` thực chất cấp phát 1024 ô.\n\n**Cái giá**: chỉ dùng các bit thấp của hash. Đó chính là lý do phải có hàm spread `h ^ (h >>> 16)` để trộn bit cao xuống.\n\n**Vì sao 0.75**\n\nVới hash phân bố đều, số phần tử trong một bucket tuân theo phân phối Poisson với λ = 0.5 tại load factor 0.75. Xác suất bucket có k phần tử: k=0 → 0.606, k=1 → 0.303, k=2 → 0.076, k=8 → khoảng 6×10⁻⁸. Nghĩa là ở ngưỡng này chuỗi hầu như luôn rất ngắn nên tra cứu thật sự là O(1), mà bộ nhớ chỉ lãng phí 25%. Javadoc của `HashMap` ghi lại chính xác con số này.\n\n**Bẫy khi khởi tạo**: `new HashMap<>(n)` là *initial capacity*, không phải số phần tử chứa được. Muốn chứa `n` phần tử mà không resize thì cần `n / 0.75 + 1`. Từ Java 19 có `HashMap.newHashMap(n)` làm sẵn phép tính này.",
+		"code": "// Muốn chứa 1000 phần tử mà không resize\nMap<K, V> m = new HashMap<>((int) (1000 / 0.75f) + 1);\n\n// Java 19+ rõ ràng hơn\nMap<K, V> m2 = HashMap.newHashMap(1000);\n\n// Tách chuỗi khi resize — không cần tính lại hash\n// if ((e.hash & oldCap) == 0) -> giữ chỉ số cũ\n// else                        -> chuyển sang chỉ số + oldCap",
+		"tags": [
+			"hashmap",
+			"load-factor",
+			"resize",
+			"internals"
+		],
+		"quiz": {
+			"options": [
+				"`new HashMap<>(1000)` đảm bảo chứa được 1000 phần tử mà không cần resize",
+				"Capacity là luỹ thừa của 2 để thay phép chia dư bằng phép AND và tách chuỗi khi resize mà không tính lại hash",
+				"Load factor 0.75 được chọn tuỳ ý, không có cơ sở tính toán",
+				"Khi resize, `HashMap` phải tính lại `hashCode()` của mọi key"
+			],
+			"correct": 1,
+			"explanation": "Ngưỡng resize là `capacity × 0.75`, nên `new HashMap<>(1000)` bắt đầu resize ở 768 phần tử. Hash được lưu sẵn trong `Node.hash` nên resize không gọi lại `hashCode()`."
+		}
+	},
+	{
+		"id": "collections-009",
+		"topic": "collections",
+		"difficulty": "medium",
+		"question": "Các cách tạo collection bất biến (immutable) trong Java? `List.of()` khác `Collections.unmodifiableList()` thế nào?",
+		"answerShort": "`List.of()` (Java 9+) tạo collection **thật sự** bất biến, cấm `null`, tối ưu bộ nhớ. `Collections.unmodifiableList()` chỉ là **view** chỉ-đọc — ai giữ list gốc vẫn sửa được và view phản ánh thay đổi đó.",
+		"answerLong": "**`List.of()` / `Set.of()` / `Map.of()`** (Java 9):\n\n- Bất biến thật: không có đường nào sửa được nội dung.\n- **Cấm phần tử `null`** — `List.of(null)` ném `NullPointerException`. Đây là thay đổi hành vi hay gây bất ngờ khi refactor từ `Arrays.asList`.\n- `Set.of` / `Map.of` ném `IllegalArgumentException` nếu có phần tử/key trùng.\n- Thứ tự duyệt của `Set.of`/`Map.of` **cố ý ngẫu nhiên hoá** giữa các lần chạy JVM, để chặn code vô tình phụ thuộc vào thứ tự.\n- Tối ưu bộ nhớ: có class riêng cho 0, 1, 2 phần tử.\n\n**`Collections.unmodifiableList(list)`**: wrapper chặn mọi method ghi, nhưng vẫn **đọc xuyên** vào list gốc. Nếu ai đó còn giữ reference tới list gốc và sửa, view thay đổi theo. Chỉ an toàn khi bạn tạo list gốc tại chỗ và không để lộ reference.\n\n**`List.copyOf(collection)`** (Java 10): copy thật sự sang list bất biến. Đây là lựa chọn đúng cho defensive copy. Tối ưu nhỏ: nếu đầu vào đã là immutable list thì trả về chính nó.\n\n**`Arrays.asList(a, b)`**: cạm bẫy riêng — kích thước cố định nhưng `set(i, v)` **được phép**, còn `add`/`remove` ném `UnsupportedOperationException`. Nó là view lên mảng gốc, sửa mảng thì list đổi theo.\n\n**Lưu ý chung**: tất cả những cái trên chỉ bất biến ở **cấu trúc**. Nếu phần tử là object mutable thì nội dung phần tử vẫn sửa được.",
+		"code": "List<String> src = new ArrayList<>(List.of(\"a\"));\n\nList<String> view = Collections.unmodifiableList(src);\nList<String> copy = List.copyOf(src);\n\nsrc.add(\"b\");\nSystem.out.println(view); // [a, b] — view nhìn xuyên vào list gốc\nSystem.out.println(copy); // [a]    — bản sao độc lập\n\n// List.of cấm null\n// List.of(\"a\", null); // NullPointerException",
+		"tags": [
+			"immutable",
+			"list-of",
+			"copyof",
+			"unmodifiable"
+		],
+		"quiz": {
+			"options": [
+				"`Collections.unmodifiableList()` tạo một bản sao độc lập với list gốc",
+				"`List.of()` cho phép chứa phần tử `null` như `Arrays.asList()`",
+				"`Collections.unmodifiableList()` chỉ là view — sửa list gốc thì view thay đổi theo",
+				"`Arrays.asList()` trả về list hoàn toàn bất biến"
+			],
+			"correct": 2,
+			"explanation": "`unmodifiableList` không copy dữ liệu. `List.of` cấm `null`, còn `Arrays.asList` cho phép `set()` nên không bất biến."
+		}
+	},
+	{
+		"id": "collections-010",
+		"topic": "collections",
+		"difficulty": "medium",
+		"question": "`Queue`, `Deque`, `PriorityQueue` và `BlockingQueue` dùng khi nào?",
+		"answerShort": "`Queue` là FIFO. `Deque` thêm/xoá được cả hai đầu (dùng làm cả stack lẫn queue). `PriorityQueue` lấy ra theo độ ưu tiên chứ không theo thứ tự vào. `BlockingQueue` chặn thread khi rỗng/đầy — nền tảng producer-consumer.",
+		"answerLong": "**`Queue<E>`** — `offer/poll/peek` (trả `false`/`null` khi thất bại) và `add/remove/element` (ném exception). Trong code sản xuất nên dùng nhóm đầu, trừ khi hàng đợi rỗng thật sự là lỗi.\n\n**`Deque<E>`** — hàng đợi hai đầu. `ArrayDeque` là cài đặt nên dùng: mảng vòng, không cấp phát node, nhanh hơn `LinkedList` và `Stack` ở mọi thao tác. **Không dùng `java.util.Stack`** — nó kế thừa `Vector`, đồng bộ vô ích, và duyệt theo thứ tự ngược trực giác (từ đáy lên).\n\n**`PriorityQueue<E>`** — binary heap, `poll()` luôn trả phần tử nhỏ nhất theo `Comparable`/`Comparator`. `offer`/`poll` là O(log n), `peek` là O(1). Hai điểm hay nhầm: nó **không** sắp xếp toàn phần (duyệt bằng iterator cho thứ tự tuỳ ý — chỉ phần tử đầu là chắc chắn), và nó **không** bị chặn kích thước.\n\n**`BlockingQueue<E>`** (`java.util.concurrent`) — thêm `put()`/`take()` chặn thread, và `offer(e, timeout, unit)`. Đây là nền tảng của mô hình producer-consumer và là hàng đợi bên trong `ThreadPoolExecutor`:\n\n- `ArrayBlockingQueue` — chặn kích thước, mảng, một khoá.\n- `LinkedBlockingQueue` — tuỳ chọn chặn kích thước, hai khoá riêng cho đầu/cuối nên throughput cao hơn. **Mặc định không chặn** (`Integer.MAX_VALUE`) — đây là nguyên nhân kinh điển của `OutOfMemoryError` khi dùng `Executors.newFixedThreadPool`.\n- `SynchronousQueue` — sức chứa 0, mỗi `put` phải chờ một `take` khớp. Dùng trong `newCachedThreadPool`.\n- `PriorityBlockingQueue`, `DelayQueue` — cho tác vụ có ưu tiên hoặc có độ trễ.",
+		"code": "// Stack: dùng ArrayDeque, không dùng java.util.Stack\nDeque<Integer> stack = new ArrayDeque<>();\nstack.push(1);\nint top = stack.pop();\n\n// Top-K bằng min-heap kích thước k\nPriorityQueue<Integer> heap = new PriorityQueue<>();\nfor (int x : data) {\n    heap.offer(x);\n    if (heap.size() > k) heap.poll();\n}\n\n// Producer-consumer có chặn kích thước -> có backpressure\nBlockingQueue<Task> q = new LinkedBlockingQueue<>(1000);",
+		"tags": [
+			"queue",
+			"deque",
+			"priorityqueue",
+			"blockingqueue"
+		],
+		"quiz": {
+			"options": [
+				"Duyệt `PriorityQueue` bằng iterator cho ra các phần tử đã sắp xếp đầy đủ",
+				"`java.util.Stack` là lựa chọn được khuyến nghị cho cấu trúc LIFO trong code mới",
+				"`LinkedBlockingQueue` không truyền capacity sẽ có sức chứa gần như vô hạn, dễ gây `OutOfMemoryError`",
+				"`BlockingQueue.take()` trả về `null` ngay khi hàng đợi rỗng"
+			],
+			"correct": 2,
+			"explanation": "`LinkedBlockingQueue` mặc định `Integer.MAX_VALUE` nên mất backpressure. `PriorityQueue` chỉ đảm bảo phần tử đầu; `take()` thì chặn thread chứ không trả `null`."
+		}
+	},
+	{
+		"id": "collections-011",
+		"topic": "collections",
+		"difficulty": "hard",
+		"question": "`CopyOnWriteArrayList` hoạt động thế nào và khi nào nên dùng?",
+		"answerShort": "Mỗi lần ghi, nó copy toàn bộ mảng nội bộ rồi thay reference `volatile`. Đọc hoàn toàn không khoá và luôn thấy một snapshot nhất quán. Chỉ phù hợp khi đọc áp đảo ghi — ví dụ danh sách listener.",
+		"answerLong": "**Cơ chế**: field `private transient volatile Object[] array`. Thao tác đọc (`get`, `size`, `iterator`) đọc thẳng từ mảng hiện tại, không khoá, không cả `modCount`. Thao tác ghi (`add`, `set`, `remove`) giữ một `ReentrantLock`, `Arrays.copyOf` toàn mảng, sửa bản sao, rồi gán vào field `volatile` — phép gán này là điểm đồng bộ khiến thread đọc thấy được thay đổi.\n\n**Hệ quả**:\n\n- Đọc là O(1) và **không bao giờ** chặn hay ném `ConcurrentModificationException`.\n- Ghi là O(n) và cấp phát một mảng mới mỗi lần → cực kỳ đắt nếu ghi thường xuyên.\n- Iterator giữ tham chiếu tới mảng tại thời điểm tạo → thấy snapshot đông cứng, sửa sau đó không phản ánh vào. `iterator.remove()` ném `UnsupportedOperationException`.\n\n**Dùng khi**: tỉ lệ đọc/ghi rất lệch và tập dữ liệu nhỏ. Trường hợp kinh điển là danh sách event listener — đăng ký vài lần lúc khởi động, duyệt hàng nghìn lần mỗi giây.\n\n**Không dùng khi**: ghi thường xuyên, hoặc list lớn. Với n phần tử và m lần ghi, chi phí là O(n×m) cùng lượng rác tương ứng. Khi đó chọn `ConcurrentLinkedQueue`, `BlockingQueue`, hoặc `Collections.synchronizedList` với đồng bộ thủ công lúc duyệt.\n\nCó bản đối ứng cho `Set`: `CopyOnWriteArraySet` (dùng chung cơ chế, nên `contains` là O(n) — chỉ hợp với set rất nhỏ).",
+		"code": "// Đúng chỗ: danh sách listener, đọc nhiều ghi hiếm\nprivate final List<EventListener> listeners = new CopyOnWriteArrayList<>();\n\npublic void fire(Event e) {\n    for (EventListener l : listeners) l.onEvent(e); // không khoá, không CME\n}\n\n// Sai chỗ: hàng đợi ghi liên tục -> copy toàn mảng mỗi lần ghi\n// List<Task> queue = new CopyOnWriteArrayList<>();",
+		"tags": [
+			"copyonwrite",
+			"concurrency",
+			"snapshot",
+			"listener"
+		],
+		"quiz": {
+			"options": [
+				"`CopyOnWriteArrayList` phù hợp cho hàng đợi có tần suất ghi cao",
+				"Iterator của nó duyệt trên snapshot và không hỗ trợ `remove()`",
+				"Thao tác đọc phải giữ khoá để đảm bảo nhất quán",
+				"Mỗi lần đọc nó tạo một bản sao mới của mảng nội bộ"
+			],
+			"correct": 1,
+			"explanation": "Bản sao được tạo khi **ghi**, không phải khi đọc. Iterator giữ snapshot nên `remove()` ném `UnsupportedOperationException`, và đọc thì hoàn toàn không khoá."
+		}
+	}
+]

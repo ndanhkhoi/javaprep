@@ -1,0 +1,102 @@
+[
+	{
+		"id": "exceptions-001",
+		"topic": "exceptions",
+		"difficulty": "easy",
+		"question": "Checked exception và unchecked exception khác nhau thế nào? Khi nào dùng loại nào?",
+		"answerShort": "Checked (kế thừa `Exception`) bị compiler bắt buộc `catch` hoặc `throws` — dùng cho lỗi mà caller có thể khôi phục. Unchecked (`RuntimeException`) không bị ép — dùng cho lỗi lập trình. `Error` là hỏng hóc của JVM, không bắt.",
+		"answerLong": "**Cây phân cấp**:\n\n```\nThrowable\n├── Error              (unchecked) — OutOfMemoryError, StackOverflowError\n└── Exception          (checked)   — IOException, SQLException\n    └── RuntimeException (unchecked) — NPE, IllegalArgumentException, IllegalStateException\n```\n\n**Ý định thiết kế ban đầu**:\n\n- **Checked** — điều kiện bất thường nhưng **dự đoán được** mà caller nên xử lý: file không tồn tại, mất kết nối mạng.\n- **Unchecked** — vi phạm hợp đồng do lỗi lập trình: tham số `null` không hợp lệ, gọi method sai trạng thái. Sửa bằng cách sửa code, không phải bằng `catch`.\n- **Error** — JVM hỏng, ứng dụng không thể khắc phục.\n\n**Thực tế đã dịch chuyển**: cộng đồng ngày càng nghiêng về unchecked, và Spring là ví dụ điển hình — nó bọc toàn bộ `SQLException` thành `DataAccessException` unchecked. Lý do:\n\n1. Checked exception **rò rỉ chi tiết cài đặt** ra chữ ký method, phá vỡ trừu tượng.\n2. Chúng lan lên khắp call stack, buộc mọi tầng trung gian phải khai báo lại.\n3. Chúng không hợp với lambda và Stream API (functional interface trong JDK không khai báo `throws`).\n4. Chúng khuyến khích mẫu tồi nhất: `catch (Exception e) {}` — nuốt lỗi cho compiler im lặng.\n\n**Nguyên tắc thực dụng hiện nay**: dùng unchecked cho hầu hết trường hợp; chỉ dùng checked khi caller **thật sự có hành động khôi phục cụ thể** và bạn muốn ép họ nghĩ về nó. Dù chọn gì, không bao giờ được nuốt exception trong im lặng.",
+		"code": "// Nuốt exception — tuyệt đối tránh\ntry { risky(); } catch (Exception e) { }\n\n// Bọc lại kèm ngữ cảnh, giữ nguyên nguyên nhân gốc\ntry {\n    return repository.load(id);\n} catch (SQLException e) {\n    throw new DataAccessException(\"Không đọc được user id=\" + id, e); // giữ cause\n}",
+		"tags": ["checked", "unchecked", "runtime-exception", "error"],
+		"quiz": {
+			"options": [
+				"Checked exception bị compiler bắt buộc xử lý; unchecked dành cho lỗi lập trình và không bị ép",
+				"`RuntimeException` là checked exception",
+				"Nên bắt `Error` để ứng dụng tiếp tục chạy bình thường",
+				"Checked exception hoạt động tốt với lambda trong Stream API"
+			],
+			"correct": 0,
+			"explanation": "`RuntimeException` là unchecked. `Error` báo hiệu JVM đã hỏng nên không nên bắt. Functional interface của JDK không khai báo `throws` nên checked exception rất vướng khi dùng trong Stream."
+		}
+	},
+	{
+		"id": "exceptions-002",
+		"topic": "exceptions",
+		"difficulty": "medium",
+		"question": "`try-with-resources` hoạt động thế nào? Nó hơn `try-finally` ở điểm nào?",
+		"answerShort": "Mọi resource implement `AutoCloseable` được đóng tự động theo thứ tự **ngược** với lúc mở, kể cả khi có exception. Quan trọng nhất: nó không nuốt mất exception gốc — lỗi lúc `close()` được gắn vào làm *suppressed exception*.",
+		"answerLong": "**Vấn đề của `try-finally`**: nếu thân `try` ném exception **và** `close()` trong `finally` cũng ném, thì exception từ `finally` **thay thế** exception gốc. Ta mất đúng thông tin cần nhất để debug. Viết đúng thủ công cần lồng try nhiều tầng và biến tạm — dài dòng nên hầu như không ai làm.\n\n**`try-with-resources` (Java 7)** giải quyết trọn vẹn:\n\n1. Resource đóng theo thứ tự ngược lúc khai báo (giống stack) — quan trọng khi `ResultSet` phụ thuộc `Statement` phụ thuộc `Connection`.\n2. Exception từ `close()` được **suppress** và gắn vào exception gốc, lấy lại bằng `getSuppressed()`.\n3. `close()` luôn được gọi, kể cả khi `return` sớm hay ném exception.\n\n**Java 9** cải tiến: biến `final` hoặc *effectively final* khai báo trước đó có thể đưa thẳng vào `try (existingResource)`, không cần khai báo lại.\n\n**Lưu ý**:\n\n- `AutoCloseable.close()` khai báo `throws Exception`; `Closeable` (cũ hơn, cho I/O) hẹp hơn với `throws IOException`.\n- `close()` nên **idempotent** — gọi nhiều lần không gây hại.\n- Stream từ `Files.lines()`, `Files.walk()` **giữ file handle** và phải đóng; ngược lại stream từ collection thì không cần.\n- Đừng đưa `null` vào try-with-resources — cấu trúc này chấp nhận `null` mà bỏ qua, che mất lỗi thật.",
+		"code": "// Thứ tự đóng ngược lại: rs -> st -> conn\ntry (Connection conn = ds.getConnection();\n     PreparedStatement st = conn.prepareStatement(SQL);\n     ResultSet rs = st.executeQuery()) {\n    while (rs.next()) process(rs);\n}\n\n// Stream đọc file GIỮ file handle -> bắt buộc đóng\ntry (Stream<String> lines = Files.lines(path)) {\n    return lines.filter(String::isBlank).count();\n}",
+		"tags": ["try-with-resources", "autocloseable", "suppressed", "resource-leak"],
+		"quiz": {
+			"options": [
+				"Resource được đóng theo đúng thứ tự khai báo, từ trên xuống dưới",
+				"Exception ném ra từ `close()` sẽ thay thế exception gốc của thân `try`",
+				"Nếu `close()` ném exception, nó được suppress và gắn vào exception gốc thay vì che mất nó",
+				"`Stream` trả về từ `Files.lines()` không cần đóng vì GC sẽ tự dọn"
+			],
+			"correct": 2,
+			"explanation": "Đây chính là ưu điểm lớn nhất so với `try-finally` viết tay. Resource đóng theo thứ tự **ngược**, và stream từ `Files.lines()` giữ file handle nên bắt buộc phải đóng."
+		}
+	},
+	{
+		"id": "exceptions-003",
+		"topic": "exceptions",
+		"difficulty": "medium",
+		"question": "Khối `finally` có luôn chạy không? `return` trong `finally` gây ra chuyện gì?",
+		"answerShort": "`finally` chạy trong hầu hết mọi trường hợp, trừ khi `System.exit()`, JVM crash, hoặc thread bị kill. `return`/`throw` trong `finally` **ghi đè** giá trị trả về và **nuốt** exception đang lan truyền — luôn là bug.",
+		"answerLong": "**Khi nào `finally` KHÔNG chạy**:\n\n- `System.exit()` hoặc `Runtime.halt()` trong thân `try`.\n- JVM crash (lỗi native, SIGKILL).\n- Thread bị dừng cưỡng bức, hoặc daemon thread bị chấm dứt khi JVM thoát.\n- Vòng lặp vô hạn hoặc deadlock trong `try` (không phải \"không chạy\" mà là \"chưa bao giờ tới\").\n\n**`return` trong `finally`** — ba hệ quả, tất cả đều xấu:\n\n1. Ghi đè giá trị `return` của khối `try`.\n2. **Nuốt mất exception** đang lan truyền — lỗi biến mất không dấu vết.\n3. Khiến logic gần như không thể suy luận khi đọc code.\n\nMọi linter (SpotBugs, SonarQube, Error Prone) đều cảnh báo mẫu này. Không có trường hợp hợp lệ nào.\n\n**Chi tiết tinh tế về giá trị trả về**: `return` trong `try` **đánh giá biểu thức trước**, lưu vào chỗ tạm, rồi mới chạy `finally`. Vì thế sửa biến trong `finally` **không** thay đổi giá trị đã trả về của kiểu primitive — nhưng sửa **nội dung** của object đã trả về thì có ảnh hưởng, vì cái được trả là reference.\n\n**Trong code hiện đại**: `finally` chủ yếu chỉ còn dùng cho những việc mà try-with-resources không lo được — ví dụ `ThreadLocal.remove()`, `lock.unlock()`, dừng đồng hồ đo, ghi log kết thúc.",
+		"code": "// return trong finally nuốt mất exception\nint bad() {\n    try { throw new IllegalStateException(\"lỗi thật\"); }\n    finally { return 42; }   // trả về 42, exception biến mất không dấu vết\n}\n\n// Primitive: gán lại trong finally không ảnh hưởng giá trị đã trả\nint tricky() {\n    int x = 1;\n    try { return x; }        // giá trị 1 đã được lưu\n    finally { x = 99; }      // vẫn trả về 1\n}",
+		"tags": ["finally", "return", "control-flow", "anti-pattern"],
+		"quiz": {
+			"options": [
+				"`finally` luôn chạy trong mọi tình huống, kể cả khi gọi `System.exit()`",
+				"`return` trong `finally` sẽ nuốt mất exception đang lan truyền và ghi đè giá trị trả về",
+				"Gán lại biến primitive trong `finally` sẽ thay đổi giá trị mà `try` đã `return`",
+				"`finally` chạy trước thân khối `try`"
+			],
+			"correct": 1,
+			"explanation": "`System.exit()` chấm dứt JVM nên `finally` không chạy. Giá trị `return` của primitive đã được lưu vào chỗ tạm trước khi `finally` bắt đầu."
+		}
+	},
+	{
+		"id": "exceptions-004",
+		"topic": "exceptions",
+		"difficulty": "medium",
+		"question": "Thiết kế custom exception thế nào cho đúng? Nên kế thừa từ đâu?",
+		"answerShort": "Kế thừa `RuntimeException` cho hầu hết trường hợp. Đặt tên kết thúc bằng `Exception`, luôn có constructor nhận `cause`, đính kèm dữ liệu ngữ cảnh dưới dạng field có kiểu — không nhét tất cả vào chuỗi message.",
+		"answerLong": "**Quy tắc thiết kế**:\n\n1. **Chọn base class**: `RuntimeException` cho lỗi nghiệp vụ và lỗi lập trình. Chỉ dùng checked khi caller có hành động khôi phục cụ thể và bạn muốn ép họ xử lý.\n2. **Luôn cung cấp constructor `(String message, Throwable cause)`** — mất `cause` là mất toàn bộ stack trace gốc, và đó là thứ khiến việc debug production trở nên bất khả thi.\n3. **Đính dữ liệu có kiểu**, không nối vào message. `e.getOrderId()` dùng được trong exception handler để dựng response; chuỗi message thì không.\n4. **Tên nói lên vấn đề nghiệp vụ**: `InsufficientBalanceException`, không phải `MyException` hay `BusinessException` dùng cho mọi thứ.\n5. **Đừng tạo một exception cho mỗi lỗi**. Vài lớp cha theo nhóm (validation / not-found / conflict / external) kèm mã lỗi là đủ và dễ ánh xạ sang HTTP status.\n6. **Ưu tiên exception có sẵn của JDK**: `IllegalArgumentException`, `IllegalStateException`, `UnsupportedOperationException`, `NoSuchElementException`.\n\n**Mẹo hiệu năng**: dựng stack trace là phần đắt nhất của việc ném exception. Với exception dùng cho luồng điều khiển tần suất cao, gọi constructor `(message, cause, suppression, writableStackTrace=false)` để bỏ qua bước này. Chỉ làm khi đã đo và thấy nó là điểm nghẽn thật.\n\n**Không bao giờ dùng exception cho luồng điều khiển thông thường** — nó chậm hơn nhiều và làm code khó đọc.",
+		"code": "public class InsufficientBalanceException extends RuntimeException {\n    private final String accountId;\n    private final BigDecimal shortfall;\n\n    public InsufficientBalanceException(String accountId, BigDecimal shortfall, Throwable cause) {\n        super(\"Tài khoản %s thiếu %s\".formatted(accountId, shortfall), cause);\n        this.accountId = accountId;\n        this.shortfall = shortfall;\n    }\n\n    public String accountId() { return accountId; }\n    public BigDecimal shortfall() { return shortfall; }   // handler dùng được để dựng response\n}",
+		"tags": ["custom-exception", "cause", "design", "stack-trace"],
+		"quiz": {
+			"options": [
+				"Custom exception nên luôn cung cấp constructor nhận `cause` để giữ nguyên stack trace gốc",
+				"Nên tạo một class exception riêng cho từng thông báo lỗi khác nhau",
+				"Dùng exception làm luồng điều khiển thông thường là cách viết code hiệu quả",
+				"Custom exception bắt buộc phải kế thừa từ `Exception` (checked)"
+			],
+			"correct": 0,
+			"explanation": "Mất `cause` là mất nguyên nhân gốc. Vài lớp cha theo nhóm là đủ; exception rất đắt do phải dựng stack trace nên không dùng cho luồng điều khiển; và kế thừa `RuntimeException` thường là lựa chọn đúng."
+		}
+	},
+	{
+		"id": "exceptions-005",
+		"topic": "exceptions",
+		"difficulty": "medium",
+		"question": "Xử lý exception trong Stream và lambda thế nào cho gọn?",
+		"answerShort": "Functional interface của JDK không khai báo `throws` nên checked exception không ném thẳng ra được. Ba cách: bọc thành unchecked bằng helper, dùng kiểu `Result`/`Either`, hoặc quay lại vòng lặp thường khi logic lỗi phức tạp.",
+		"answerLong": "**Gốc rễ vấn đề**: `Function<T,R>.apply` không khai báo `throws`, nên lambda bên trong `map()` không được phép ném checked exception. `try-catch` viết thẳng trong lambda thì làm mất hết tính súc tích — thứ duy nhất khiến Stream đáng dùng.\n\n**Ba cách xử lý, theo thứ tự nên cân nhắc**:\n\n1. **Quay lại vòng lặp `for`** khi mỗi phần tử cần xử lý lỗi khác nhau, hoặc cần dừng sớm với ngữ cảnh. Đây thường là câu trả lời đúng, dù ít ai thích nghe.\n2. **Helper bọc thành unchecked** — giữ được pipeline gọn. Phù hợp khi lỗi là bất thường thật sự và nên lan lên trên.\n3. **Kiểu `Result<T, E>`** — mã hoá thành công/thất bại vào kiểu trả về, rồi `partitioningBy` để tách hai nhóm. Dùng khi cần **xử lý tiếp** cả phần lỗi (ví dụ import hàng loạt: ghi nhận dòng hỏng và vẫn tiếp tục).\n\n**Ba lưu ý quan trọng**:\n\n- **Parallel stream**: exception từ một task sẽ huỷ toàn bộ pipeline, và cái ném ra là cái nào thì **không xác định** nếu nhiều task cùng hỏng.\n- `Optional` không phải công cụ xử lý lỗi. Nó chỉ diễn tả \"có thể vắng mặt\", không mang thông tin **vì sao** vắng.\n- Thư viện như Vavr cung cấp `Try<T>` sẵn nếu dự án chấp nhận thêm dependency.",
+		"code": "// Helper bọc checked exception\n@FunctionalInterface interface ThrowingFunction<T, R> { R apply(T t) throws Exception; }\n\nstatic <T, R> Function<T, R> unchecked(ThrowingFunction<T, R> f) {\n    return t -> {\n        try { return f.apply(t); }\n        catch (Exception e) { throw new IllegalStateException(\"Lỗi khi xử lý \" + t, e); }\n    };\n}\n\nList<String> contents = paths.stream()\n    .map(unchecked(Files::readString))\n    .toList();",
+		"tags": ["stream", "lambda", "checked-exception", "functional"],
+		"quiz": {
+			"options": [
+				"Lambda trong `map()` có thể ném checked exception mà không cần xử lý gì thêm",
+				"`Optional` là công cụ chuẩn để truyền thông tin lỗi trong Stream",
+				"Trong parallel stream, exception luôn được gom lại và ném ra đầy đủ theo thứ tự phần tử",
+				"Functional interface của JDK không khai báo `throws`, nên checked exception phải được bọc lại hoặc mã hoá vào kiểu trả về"
+			],
+			"correct": 3,
+			"explanation": "`Function.apply` không có `throws` nên compiler từ chối. `Optional` chỉ nói \"vắng mặt\" chứ không nói lý do, và trong parallel stream thì exception nào thoát ra là không xác định."
+		}
+	}
+]

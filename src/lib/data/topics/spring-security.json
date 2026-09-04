@@ -1,0 +1,82 @@
+[
+	{
+		"id": "spring-security-001",
+		"topic": "spring-security",
+		"difficulty": "medium",
+		"question": "Spring Security filter chain hoạt động thế nào?",
+		"answerShort": "`DelegatingFilterProxy` chuyển request vào `FilterChainProxy`, nơi chọn `SecurityFilterChain` khớp đầu tiên rồi chạy tuần tự các filter: CORS → CSRF → xác thực → uỷ quyền → `FilterSecurityInterceptor`.",
+		"answerLong": "**Luồng đầy đủ**:\n\n1. Servlet container gọi `DelegatingFilterProxy` (cầu nối giữa vòng đời servlet và bean Spring).\n2. Nó uỷ nhiệm cho bean `springSecurityFilterChain`, tức là `FilterChainProxy`.\n3. `FilterChainProxy` duyệt danh sách `SecurityFilterChain` và chọn **cái đầu tiên** khớp request. **Thứ tự khai báo rất quan trọng** — chuỗi có matcher rộng đặt trước sẽ nuốt hết request của các chuỗi sau.\n4. Chạy tuần tự các filter trong chuỗi được chọn.\n\n**Các filter chính, theo thứ tự**:\n\n| Filter | Vai trò |\n|---|---|\n| `CorsFilter` | xử lý preflight và header CORS |\n| `CsrfFilter` | kiểm tra CSRF token |\n| `SecurityContextHolderFilter` | nạp `SecurityContext` từ session |\n| `UsernamePasswordAuthenticationFilter` | xác thực bằng form |\n| `BearerTokenAuthenticationFilter` | xác thực bằng JWT/OAuth2 |\n| `ExceptionTranslationFilter` | đổi exception bảo mật thành 401/403 |\n| `AuthorizationFilter` | quyết định cho phép hay từ chối |\n\n**Các khái niệm cốt lõi**:\n\n- **`SecurityContextHolder`** — giữ `Authentication` hiện tại, dựa trên `ThreadLocal`. Vì thế nó **không tự truyền** sang thread của `@Async` hay `CompletableFuture` (cần `DelegatingSecurityContextExecutor`).\n- **`AuthenticationManager`** → `ProviderManager` → danh sách `AuthenticationProvider`.\n- **`UserDetailsService`** — nạp thông tin người dùng theo username.\n- **`PasswordEncoder`** — luôn dùng `DelegatingPasswordEncoder` (mặc định của `PasswordEncoderFactories`), nó ghi tiền tố thuật toán vào hash nên nâng cấp thuật toán sau này không phá dữ liệu cũ.\n\n**Cấu hình hiện đại (Spring Security 6)**: `WebSecurityConfigurerAdapter` đã bị **gỡ bỏ**. Khai báo bean `SecurityFilterChain` với cú pháp lambda; cú pháp chuỗi `and()` cũng đã deprecated.",
+		"code": "@Bean\n@Order(1)   // chuỗi hẹp hơn phải đặt TRƯỚC\nSecurityFilterChain apiChain(HttpSecurity http) throws Exception {\n    return http\n        .securityMatcher(\"/api/**\")\n        .csrf(csrf -> csrf.disable())                        // API dùng token, không dùng cookie\n        .sessionManagement(s -> s.sessionCreationPolicy(STATELESS))\n        .authorizeHttpRequests(a -> a\n            .requestMatchers(\"/api/public/**\").permitAll()\n            .anyRequest().authenticated())\n        .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()))\n        .build();\n}",
+		"tags": ["filter-chain", "securitycontext", "authentication", "spring-security-6"],
+		"quiz": {
+			"options": [
+				"`FilterChainProxy` chạy toàn bộ `SecurityFilterChain` đã khai báo cho mỗi request",
+				"`FilterChainProxy` chọn `SecurityFilterChain` khớp **đầu tiên**, nên thứ tự khai báo quyết định hành vi",
+				"`SecurityContextHolder` tự động truyền context sang thread của `@Async`",
+				"`WebSecurityConfigurerAdapter` vẫn là cách cấu hình được khuyến nghị trong Spring Security 6"
+			],
+			"correct": 1,
+			"explanation": "Chỉ một chuỗi được chọn cho mỗi request. `SecurityContextHolder` dựa trên `ThreadLocal` nên không tự truyền, và `WebSecurityConfigurerAdapter` đã bị gỡ bỏ ở phiên bản 6."
+		}
+	},
+	{
+		"id": "spring-security-002",
+		"topic": "spring-security",
+		"difficulty": "medium",
+		"question": "Authentication và authorization khác nhau thế nào? Spring hỗ trợ phân quyền ở những mức nào?",
+		"answerShort": "Authentication trả lời \"bạn là ai\", authorization trả lời \"bạn được làm gì\". Spring hỗ trợ phân quyền ở mức URL (`authorizeHttpRequests`), mức method (`@PreAuthorize`, `@PostAuthorize`) và mức bản ghi (ACL hoặc kiểm tra trong nghiệp vụ).",
+		"answerLong": "**Authentication** — xác minh danh tính: mật khẩu, JWT, OAuth2, chứng chỉ, khoá API. Kết quả là một `Authentication` chứa principal, credentials và danh sách `GrantedAuthority`.\n\n**Authorization** — quyết định quyền truy cập. Ba mức:\n\n1. **Mức URL** — `authorizeHttpRequests`. Nhanh, khai báo tập trung. Nhược điểm: dễ lệch khỏi thực tế khi đường dẫn thay đổi mà quy tắc quên cập nhật.\n2. **Mức method** — `@PreAuthorize(\"hasRole('ADMIN')\")`, `@PostAuthorize`, `@PreFilter`/`@PostFilter`. Bật bằng `@EnableMethodSecurity`. Đặt quy tắc cạnh code nghiệp vụ nên khó bị lệch hơn, và biểu thức SpEL truy cập được tham số method.\n3. **Mức bản ghi** — \"user chỉ xem được đơn hàng của chính mình\". Spring Security ACL rất nặng nề; thực tế đa số dự án lọc ngay trong truy vấn (`where owner_id = :currentUser`) — vừa an toàn vừa hiệu quả hơn kiểm tra sau khi nạp.\n\n**Role và authority**: `hasRole('ADMIN')` tự thêm tiền tố `ROLE_` rồi kiểm tra authority `ROLE_ADMIN`. `hasAuthority('ROLE_ADMIN')` thì không thêm gì. Đây là nguồn nhầm lẫn kinh điển — chọn một quy ước và giữ nhất quán.\n\n**Nguyên tắc thiết kế**:\n\n- **Từ chối theo mặc định**: kết thúc bằng `.anyRequest().authenticated()`, không bao giờ là `permitAll()`.\n- **Ưu tiên quyền chi tiết (`order:read`, `order:cancel`) hơn role thô** — role phình ra rất nhanh và không diễn tả được ngoại lệ.\n- **`@PostAuthorize` chạy sau khi method đã thực thi** — không dùng cho method có tác dụng phụ, vì hành động đã xảy ra rồi mới bị từ chối.",
+		"code": "@Configuration @EnableMethodSecurity\nclass SecurityConfig { }\n\n@Service\nclass OrderService {\n    @PreAuthorize(\"hasAuthority('order:read') and #userId == authentication.name\")\n    List<Order> findByUser(String userId) { ... }\n\n    @PreAuthorize(\"hasRole('ADMIN')\")\n    void cancelAny(long orderId) { ... }\n}\n\n// Phân quyền mức bản ghi: lọc ngay trong truy vấn\n@Query(\"select o from Order o where o.id = :id and o.ownerId = :owner\")\nOptional<Order> findOwned(@Param(\"id\") long id, @Param(\"owner\") String owner);",
+		"tags": ["authentication", "authorization", "preauthorize", "rbac"],
+		"quiz": {
+			"options": [
+				"`hasRole('ADMIN')` tự thêm tiền tố `ROLE_` còn `hasAuthority('ADMIN')` thì không",
+				"`@PostAuthorize` ngăn method thực thi khi người dùng không đủ quyền",
+				"Phân quyền mức URL đủ để bảo vệ quyền truy cập theo từng bản ghi",
+				"Authentication và authorization là hai tên gọi của cùng một cơ chế"
+			],
+			"correct": 0,
+			"explanation": "`@PostAuthorize` chạy **sau** khi method đã thực thi nên không ngăn được tác dụng phụ. Quy tắc URL không biết bản ghi nào thuộc về ai — phải lọc trong truy vấn."
+		}
+	},
+	{
+		"id": "spring-security-003",
+		"topic": "spring-security",
+		"difficulty": "hard",
+		"question": "JWT hoạt động thế nào? Những lưu ý bảo mật khi dùng làm access token?",
+		"answerShort": "JWT gồm header.payload.signature mã hoá base64url, được **ký** chứ không mã hoá — ai cũng đọc được nội dung. Lưu ý chính: luôn xác minh chữ ký và thuật toán, đặt hạn ngắn, và không thể thu hồi trước hạn.",
+		"answerLong": "**Cấu trúc**: `header.payload.signature`, mỗi phần base64url. Header ghi thuật toán (`HS256`, `RS256`), payload chứa claim (`sub`, `exp`, `iat`, `iss`, `aud`, và claim riêng), signature xác thực tính toàn vẹn.\n\n**Điểm quan trọng nhất: JWT được ký, KHÔNG được mã hoá.** Bất kỳ ai có token đều decode và đọc được payload. **Không bao giờ** đặt dữ liệu nhạy cảm vào đó.\n\n**Các lỗ hổng cần biết**:\n\n1. **`alg: none`** — tấn công kinh điển: kẻ tấn công đổi header thành `none` và bỏ chữ ký. Thư viện phải được cấu hình chỉ chấp nhận danh sách thuật toán cho phép, không được tin header.\n2. **Nhầm lẫn thuật toán** — token ký `RS256` bị gửi lại dưới dạng `HS256` với public key làm khoá HMAC. Cũng phòng bằng cách cố định thuật toán chấp nhận.\n3. **Không thu hồi được** — token còn hiệu lực tới khi hết hạn. Giải pháp: hạn ngắn (5–15 phút) cộng refresh token, kèm danh sách thu hồi cho các trường hợp khẩn (đăng xuất toàn cục, tài khoản bị khoá).\n4. **Nơi lưu trữ** — `localStorage` bị XSS đọc được. Cookie `HttpOnly` + `Secure` + `SameSite=Strict` an toàn hơn trước XSS nhưng cần bảo vệ CSRF. Không có lựa chọn hoàn hảo; cookie `HttpOnly` cộng CSRF token thường là cân bằng tốt nhất.\n\n**Khi nào JWT không phải lựa chọn đúng**: nếu tất cả dịch vụ đều dùng chung một database session, session phía server đơn giản hơn, thu hồi được tức thì và không kéo theo lớp vấn đề trên. JWT có lợi khi cần xác thực **không trạng thái** giữa nhiều dịch vụ độc lập.\n\n**Trong Spring**: dùng `oauth2ResourceServer().jwt()` với `JwtDecoder` — nó xác minh chữ ký, hạn dùng, issuer và audience theo đúng chuẩn. **Đừng tự viết** phần xác minh JWT.",
+		"code": "@Bean\nJwtDecoder jwtDecoder() {\n    var decoder = NimbusJwtDecoder.withJwkSetUri(jwkUri)\n        .jwsAlgorithm(SignatureAlgorithm.RS256)   // cố định thuật toán -> chặn alg confusion\n        .build();\n    decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));\n    return decoder;\n}\n\nhttp.oauth2ResourceServer(o -> o.jwt(j -> j.decoder(jwtDecoder())));\n\n// Cookie cho token: HttpOnly + Secure + SameSite\nResponseCookie.from(\"token\", jwt)\n    .httpOnly(true).secure(true).sameSite(\"Strict\").maxAge(Duration.ofMinutes(15)).build();",
+		"tags": ["jwt", "token", "stateless", "revocation"],
+		"quiz": {
+			"options": [
+				"JWT được mã hoá nên có thể chứa dữ liệu nhạy cảm một cách an toàn",
+				"JWT chỉ được ký chứ không mã hoá — ai có token đều đọc được payload, và không thu hồi được trước hạn",
+				"Có thể thu hồi một JWT ngay lập tức mà không cần cơ chế bổ sung nào",
+				"Nên đọc thuật toán từ header của token và dùng đúng thuật toán đó để xác minh"
+			],
+			"correct": 1,
+			"explanation": "Base64url là mã hoá dạng biểu diễn, không phải mã hoá bảo mật. Tin vào header `alg` mở đường cho tấn công `alg: none` và nhầm lẫn thuật toán."
+		}
+	},
+	{
+		"id": "spring-security-004",
+		"topic": "spring-security",
+		"difficulty": "medium",
+		"question": "CSRF là gì? Khi nào cần bật và khi nào tắt được trong Spring Security?",
+		"answerShort": "CSRF lợi dụng việc trình duyệt **tự gửi kèm cookie** để thực hiện hành động thay người dùng. Cần bật khi xác thực bằng cookie/session. Tắt được khi API hoàn toàn không trạng thái và token nằm trong header `Authorization`.",
+		"answerLong": "**Cơ chế tấn công**: người dùng đã đăng nhập vào `bank.com` (session nằm trong cookie). Họ mở `evil.com`, trang này tự submit một form tới `bank.com/transfer`. Trình duyệt **tự động gửi kèm cookie**, nên server thấy một request hợp lệ.\n\n**Điều kiện để CSRF khả thi**: xác thực dựa trên thứ trình duyệt gửi **tự động** — cookie, HTTP Basic, chứng chỉ client. Nếu ứng dụng yêu cầu một header mà JavaScript phải chủ động đặt (`Authorization: Bearer ...`), trang khác origin không đặt được header đó, nên CSRF không áp dụng.\n\n**Cơ chế phòng vệ**:\n\n1. **Synchronizer token** — mặc định của Spring Security. Server sinh token ngẫu nhiên, nhúng vào form; mọi request thay đổi dữ liệu phải kèm token. `evil.com` không đọc được token vì Same-Origin Policy chặn.\n2. **`SameSite` cookie** — `Lax` (mặc định của trình duyệt hiện đại) đã chặn phần lớn CSRF; `Strict` chặn triệt để hơn nhưng ảnh hưởng trải nghiệm khi đi từ liên kết ngoài. Đây là **phòng vệ theo tầng**, không thay thế hoàn toàn token.\n3. **Kiểm tra `Origin`/`Referer`** — bổ sung.\n\n**Khi nào tắt được**: API thật sự không trạng thái, xác thực **chỉ** bằng header `Authorization`, và **không** dùng cookie cho xác thực. Tắt vì \"gặp lỗi 403 khi test\" là sai lầm nguy hiểm.\n\n**Với SPA dùng cookie**: bật CSRF với `CookieCsrfTokenRepository.withHttpOnlyFalse()` để JavaScript đọc được token và gửi lại trong header `X-XSRF-TOKEN`. Ở Spring Security 6 cần thêm `CsrfTokenRequestAttributeHandler` cấu hình đúng, vì hành vi trì hoãn nạp token đã thay đổi so với phiên bản 5.\n\n**Lưu ý**: Spring Security **không** áp CSRF cho method an toàn (`GET`, `HEAD`, `OPTIONS`, `TRACE`) — nên `GET` tuyệt đối không được thay đổi dữ liệu.",
+		"code": "// API không trạng thái, token nằm trong header Authorization -> tắt được\nhttp.csrf(csrf -> csrf.disable())\n    .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));\n\n// SPA dùng cookie -> BẮT BUỘC bật\nhttp.csrf(csrf -> csrf\n    .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())\n    .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()));",
+		"tags": ["csrf", "samesite", "cookie", "stateless"],
+		"quiz": {
+			"options": [
+				"Nên tắt CSRF cho mọi ứng dụng vì nó thường gây lỗi 403",
+				"CSRF áp dụng cho cả request `GET`",
+				"CSRF khả thi khi xác thực dựa vào thứ trình duyệt gửi tự động (cookie); API dùng header `Authorization` thì không bị",
+				"Đặt `SameSite=Lax` là đủ để thay thế hoàn toàn CSRF token"
+			],
+			"correct": 2,
+			"explanation": "Trang khác origin không đặt được header `Authorization`. Spring Security bỏ qua method an toàn như `GET`, và `SameSite` là phòng vệ theo tầng chứ không thay thế token."
+		}
+	}
+]

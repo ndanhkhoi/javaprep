@@ -1,0 +1,252 @@
+[
+	{
+		"id": "spring-boot-001",
+		"topic": "spring-boot",
+		"difficulty": "medium",
+		"question": "Auto-configuration của Spring Boot hoạt động thế nào?",
+		"answerShort": "`@EnableAutoConfiguration` đọc danh sách class cấu hình từ `META-INF/spring/...AutoConfiguration.imports` trong mọi jar, rồi áp các annotation `@Conditional` để quyết định cấu hình nào thực sự được kích hoạt.",
+		"answerLong": "**Quy trình đầy đủ**:\n\n1. `@SpringBootApplication` gộp `@SpringBootConfiguration` + `@ComponentScan` + `@EnableAutoConfiguration`.\n2. `AutoConfigurationImportSelector` đọc file `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` từ **mọi** jar trên classpath. (Trước Boot 2.7 là khoá `EnableAutoConfiguration` trong `spring.factories`.)\n3. Loại bỏ những cấu hình bị `exclude`.\n4. Đánh giá các annotation `@Conditional` trên từng class cấu hình; chỉ những cái thoả điều kiện mới được đăng ký.\n\n**Các điều kiện thường gặp**:\n\n| Annotation | Ý nghĩa |\n|---|---|\n| `@ConditionalOnClass` | class có trên classpath |\n| `@ConditionalOnMissingBean` | **quan trọng nhất** — chỉ tạo khi ứng dụng chưa tự định nghĩa |\n| `@ConditionalOnProperty` | property có giá trị nhất định |\n| `@ConditionalOnWebApplication` | là ứng dụng web (servlet/reactive) |\n| `@ConditionalOnMissingClass` | class **không** có trên classpath |\n\n**`@ConditionalOnMissingBean` là chìa khoá của triết lý \"cấu hình có chủ kiến nhưng nhường quyền\"**: Boot chỉ cung cấp mặc định khi bạn chưa nói gì. Khai báo bean của mình là mặc định tự động biến mất.\n\n**Thứ tự đánh giá** quan trọng: auto-configuration chạy **sau** cấu hình của người dùng (`@AutoConfigureAfter`/`@AutoConfigureBefore` tinh chỉnh thêm), nhờ vậy `@ConditionalOnMissingBean` mới thấy được bean bạn đã khai.\n\n**Gỡ lỗi**: chạy với `--debug` để in ra **báo cáo điều kiện** — liệt kê cấu hình nào được áp dụng, cái nào bị loại và **vì sao**. Đây là công cụ đầu tiên nên dùng khi Boot \"không cấu hình cái mình mong đợi\".",
+		"code": "# Xem báo cáo điều kiện: cấu hình nào khớp, cái nào không và vì sao\njava -jar app.jar --debug\n\n# Loại một auto-configuration cụ thể\n@SpringBootApplication(exclude = DataSourceAutoConfiguration.class)\n\n# Starter tự viết: khai báo trong\n# src/main/resources/META-INF/spring/\n#   org.springframework.boot.autoconfigure.AutoConfiguration.imports",
+		"tags": [
+			"auto-configuration",
+			"conditional",
+			"spring-factories",
+			"starter"
+		],
+		"quiz": {
+			"options": [
+				"`@ConditionalOnMissingBean` cho phép bean do người dùng khai báo ghi đè mặc định của Boot",
+				"Auto-configuration quét toàn bộ classpath để tìm class có `@Configuration` bất kỳ",
+				"Auto-configuration được đánh giá trước cấu hình của người dùng",
+				"Không có cách nào loại bỏ một auto-configuration cụ thể"
+			],
+			"correct": 0,
+			"explanation": "Auto-configuration đọc từ file `.imports` chứ không quét mù classpath, và chạy **sau** cấu hình người dùng — đó chính là điều làm `@ConditionalOnMissingBean` hoạt động."
+		}
+	},
+	{
+		"id": "spring-boot-002",
+		"topic": "spring-boot",
+		"difficulty": "easy",
+		"question": "Spring Boot đọc cấu hình từ những nguồn nào? Thứ tự ưu tiên ra sao?",
+		"answerShort": "Từ ngoài vào trong: tham số dòng lệnh → biến môi trường / system property → `application-{profile}.yml` ngoài jar → trong jar → `@PropertySource` → giá trị mặc định. Nguồn ưu tiên cao ghi đè nguồn thấp hơn.",
+		"answerLong": "**Thứ tự ưu tiên** (cao xuống thấp, rút gọn phần thường gặp):\n\n1. Devtools global settings.\n2. `@TestPropertySource` trong test.\n3. **Tham số dòng lệnh** (`--server.port=9090`).\n4. `SPRING_APPLICATION_JSON`.\n5. Servlet init parameter.\n6. **Biến môi trường của hệ điều hành**.\n7. **Java System properties** (`-Dkey=value`).\n8. `application-{profile}.yml` **ngoài** jar (thư mục `config/` hoặc thư mục hiện tại).\n9. `application-{profile}.yml` **trong** jar.\n10. `application.yml` ngoài jar → trong jar.\n11. `@PropertySource` trên class `@Configuration`.\n12. Giá trị mặc định trong `SpringApplication.setDefaultProperties`.\n\n**Điểm cốt lõi**: cấu hình theo profile luôn thắng cấu hình chung, và cấu hình từ bên ngoài luôn thắng cấu hình đóng gói. Đây chính là điều làm một artifact chạy được ở mọi môi trường mà không phải build lại — nguyên tắc của 12-factor app.\n\n**Quy ước tên relaxed binding**: `spring.datasource.url` khớp với biến môi trường `SPRING_DATASOURCE_URL`. Quan trọng cho Docker và Kubernetes.\n\n**Đọc giá trị trong code**: `@Value(\"${key:default}\")` cho giá trị lẻ; `@ConfigurationProperties` cho nhóm cấu hình — an toàn kiểu, validate được, hỗ trợ IDE, và test dễ hơn hẳn. Ưu tiên `@ConfigurationProperties` cho mọi thứ ngoài giá trị đơn lẻ.\n\n**Bí mật**: không bao giờ commit vào `application.yml`. Dùng biến môi trường, Kubernetes Secret, Vault, hoặc AWS Secrets Manager qua Spring Cloud Config.",
+		"code": "@ConfigurationProperties(prefix = \"app.mail\")\n@Validated\npublic record MailProperties(\n    @NotBlank String host,\n    @Min(1) @Max(65535) int port,\n    @DefaultValue(\"30s\") Duration timeout\n) {}\n\n# Ghi đè theo thứ tự ưu tiên\njava -jar app.jar --app.mail.port=2525\nSPRING_PROFILES_ACTIVE=prod APP_MAIL_HOST=smtp.internal java -jar app.jar",
+		"tags": [
+			"configuration",
+			"property-precedence",
+			"profiles",
+			"configurationproperties"
+		],
+		"quiz": {
+			"options": [
+				"`application.yml` trong jar có ưu tiên cao hơn biến môi trường",
+				"Tham số dòng lệnh có ưu tiên cao hơn `application.yml` và biến môi trường",
+				"`@Value` được khuyến nghị hơn `@ConfigurationProperties` cho nhóm cấu hình lớn",
+				"Cấu hình theo profile có ưu tiên thấp hơn `application.yml` chung"
+			],
+			"correct": 1,
+			"explanation": "Nguồn càng \"bên ngoài\" càng ưu tiên cao, để một artifact chạy được ở mọi môi trường. Cấu hình theo profile luôn thắng cấu hình chung, và `@ConfigurationProperties` mới là lựa chọn cho nhóm cấu hình."
+		}
+	},
+	{
+		"id": "spring-boot-003",
+		"topic": "spring-boot",
+		"difficulty": "medium",
+		"question": "Profile trong Spring Boot dùng thế nào? Cách kích hoạt và các bẫy thường gặp?",
+		"answerShort": "Profile cho phép bật/tắt bean và file cấu hình theo môi trường. Kích hoạt bằng `SPRING_PROFILES_ACTIVE` hoặc `--spring.profiles.active`. Bẫy lớn nhất: dùng `@Profile` cho logic nghiệp vụ thay vì chỉ cho hạ tầng.",
+		"answerLong": "**Ba cách dùng**:\n\n1. **File cấu hình theo profile**: `application-dev.yml`, `application-prod.yml`. Được nạp **chồng lên** `application.yml`, chỉ ghi đè các khoá được khai báo lại.\n2. **`@Profile` trên bean**: `@Profile(\"prod\")`, `@Profile(\"!test\")`, hoặc biểu thức `@Profile(\"prod & !legacy\")`.\n3. **Nhiều tài liệu trong một file YAML**, ngăn cách bằng `---` và `spring.config.activate.on-profile`.\n\n**Kích hoạt** (theo thứ tự ưu tiên): `--spring.profiles.active=prod` → `SPRING_PROFILES_ACTIVE=prod` → `spring.profiles.active` trong file → `@ActiveProfiles` trong test.\n\n`spring.profiles.include` bổ sung profile luôn được bật kèm; `spring.profiles.group` (Boot 2.4+) định nghĩa nhóm để một profile kéo theo nhiều profile khác.\n\n**Bốn cái bẫy**:\n\n1. **Dùng `@Profile` cho logic nghiệp vụ** — dẫn tới việc code chạy ở production chưa từng được test. Chỉ dùng profile cho **hạ tầng** (datasource, mock của dịch vụ ngoài, mức log).\n2. **Quá nhiều profile** — tổ hợp bùng nổ, không ai còn biết cấu hình thật sự đang là gì.\n3. **Bí mật trong `application-prod.yml`** đã commit — dùng biến môi trường hoặc secret manager.\n4. **Profile `default`** — chỉ kích hoạt khi **không có** profile nào khác được bật; hay bị hiểu nhầm là \"luôn bật\".\n\n**Kiểm tra khi chạy**: `Environment.getActiveProfiles()`, hoặc endpoint Actuator `/actuator/env`. Log lúc khởi động cũng in ra profile đang hoạt động — luôn nên kiểm tra dòng này khi debug sự cố cấu hình.",
+		"code": "# application.yml — nhiều tài liệu trong một file\nspring:\n  profiles:\n    group:\n      prod: [prod-db, prod-cache, metrics]\n---\nspring:\n  config.activate.on-profile: dev\n  datasource.url: jdbc:h2:mem:test\nlogging.level.root: DEBUG\n\n// Chỉ dùng cho hạ tầng, không dùng cho logic nghiệp vụ\n@Bean @Profile(\"!prod\")\nPaymentGateway mockGateway() { return new MockPaymentGateway(); }",
+		"tags": [
+			"profile",
+			"environment",
+			"configuration",
+			"12-factor"
+		],
+		"quiz": {
+			"options": [
+				"Profile `default` luôn được kích hoạt song song với mọi profile khác",
+				"`@Profile` là công cụ tốt để bật/tắt logic nghiệp vụ theo môi trường",
+				"Profile `default` chỉ kích hoạt khi không có profile nào khác được bật",
+				"File `application-prod.yml` thay thế hoàn toàn `application.yml`"
+			],
+			"correct": 2,
+			"explanation": "File theo profile được nạp **chồng lên** file chung chứ không thay thế. Dùng `@Profile` cho logic nghiệp vụ khiến code chạy production chưa từng được test."
+		}
+	},
+	{
+		"id": "spring-boot-004",
+		"topic": "spring-boot",
+		"difficulty": "medium",
+		"question": "Spring Boot Actuator cung cấp gì? Cần lưu ý gì về bảo mật?",
+		"answerShort": "Actuator phơi ra endpoint vận hành: `/health`, `/metrics`, `/info`, `/env`, `/loggers`, `/threaddump`, `/heapdump`. Mặc định chỉ `health` mở qua HTTP — phần còn lại phải bật thủ công và **bắt buộc** phải bảo vệ.",
+		"answerLong": "**Các endpoint chính**:\n\n| Endpoint | Công dụng |\n|---|---|\n| `/health` | probe cho Kubernetes; có `liveness` và `readiness` riêng |\n| `/metrics` | số liệu qua Micrometer |\n| `/prometheus` | định dạng để Prometheus thu thập |\n| `/info` | thông tin build, git commit |\n| `/env` | toàn bộ property — **nhạy cảm** |\n| `/loggers` | xem và **đổi mức log lúc đang chạy** — cực kỳ hữu ích khi điều tra sự cố |\n| `/threaddump`, `/heapdump` | chẩn đoán — rất nhạy cảm |\n| `/mappings`, `/beans`, `/conditions` | soi cấu hình |\n\n**Bảo mật — đây là phần hay bị làm sai nhất**:\n\n1. Mặc định chỉ `health` được phơi qua web. Đừng bao giờ đặt `management.endpoints.web.exposure.include=*` trên môi trường công khai.\n2. **Tách cổng quản trị**: `management.server.port=9090` và chỉ mở cổng này trong mạng nội bộ. Đây là biện pháp hiệu quả nhất.\n3. Bảo vệ bằng Spring Security với role riêng nếu buộc phải phơi ra.\n4. `/heapdump` chứa **toàn bộ bộ nhớ ứng dụng** — mật khẩu, token, dữ liệu người dùng. Phơi nó ra công khai tương đương rò rỉ toàn bộ dữ liệu.\n5. `/env` và `/configprops` có che bớt giá trị theo tên khoá (`password`, `secret`, `key`), nhưng cơ chế này dựa trên khớp tên nên không đáng tin tuyệt đối.\n\n**Health indicator tuỳ chỉnh**: implement `HealthIndicator`. Với Kubernetes, phân biệt rõ **liveness** (còn sống không — sai thì restart pod) và **readiness** (sẵn sàng nhận traffic chưa — sai thì rút khỏi load balancer). Nhầm hai cái này gây restart loop khi một dependency tạm thời không khả dụng.",
+		"code": "management:\n  server.port: 9090                    # cổng riêng, chỉ mở nội bộ\n  endpoints.web.exposure.include: health,info,prometheus,loggers\n  endpoint.health:\n    probes.enabled: true               # bật liveness/readiness cho Kubernetes\n    show-details: when-authorized\n\n@Component\nclass QueueHealthIndicator implements HealthIndicator {\n    public Health health() {\n        int depth = queue.depth();\n        return depth < 1000 ? Health.up().withDetail(\"depth\", depth).build()\n                            : Health.down().withDetail(\"depth\", depth).build();\n    }\n}",
+		"tags": [
+			"actuator",
+			"health",
+			"metrics",
+			"security"
+		],
+		"quiz": {
+			"options": [
+				"Mặc định Actuator phơi toàn bộ endpoint qua HTTP",
+				"`/heapdump` an toàn để phơi công khai vì chỉ chứa số liệu thống kê",
+				"Liveness và readiness probe có thể dùng chung một endpoint mà không gây vấn đề gì",
+				"Mặc định chỉ `/health` được phơi qua web; `/heapdump` chứa toàn bộ bộ nhớ nên tuyệt đối không phơi công khai"
+			],
+			"correct": 3,
+			"explanation": "Heap dump chứa mật khẩu, token và dữ liệu người dùng đang nằm trong bộ nhớ. Nhầm lẫn liveness với readiness gây restart loop khi dependency tạm thời hỏng."
+		}
+	},
+	{
+		"id": "spring-boot-005",
+		"topic": "spring-boot",
+		"difficulty": "easy",
+		"question": "Starter trong Spring Boot là gì? Vì sao nó giải quyết được vấn đề phiên bản?",
+		"answerShort": "Starter là một POM tổng hợp gom sẵn các dependency thường đi cùng nhau. `spring-boot-dependencies` (BOM) khai báo phiên bản **đã được kiểm thử tương thích** cho hàng trăm thư viện, nên bạn không cần ghi phiên bản.",
+		"answerLong": "**Vấn đề trước Boot**: dựng một ứng dụng Spring MVC cần khai báo hàng chục dependency với phiên bản khớp nhau. Sai một phiên bản là `NoSuchMethodError` lúc chạy — dependency hell.\n\n**Starter** là artifact hầu như không có code, chỉ có `pom.xml` liệt kê các dependency đi cùng nhau. `spring-boot-starter-web` kéo theo Spring MVC, Tomcat nhúng, Jackson, validation.\n\n**BOM (`spring-boot-dependencies`)** là mảnh ghép then chốt: nó khai báo `dependencyManagement` cho hàng trăm thư viện với bộ phiên bản **đã được đội Spring kiểm thử cùng nhau**. Kế thừa từ `spring-boot-starter-parent` (hoặc import BOM ở chế độ `scope=import`) là bạn không phải ghi `<version>` nữa.\n\n**Ghi đè phiên bản**: đặt property tương ứng, ví dụ `<jackson-bom.version>2.17.0</jackson-bom.version>`. Làm vậy phải hiểu là mình đang bước ra khỏi tổ hợp đã kiểm thử.\n\n**Các starter hay dùng**: `web`, `data-jpa`, `security`, `validation`, `actuator`, `test`, `webflux`, `cache`, `amqp`.\n\n**Starter tự viết** — hữu ích cho thư viện dùng chung nội bộ trong tổ chức:\n\n1. Module `*-autoconfigure` chứa class `@AutoConfiguration` và `@ConfigurationProperties`.\n2. Đăng ký trong `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`.\n3. Module `*-starter` chỉ gom dependency.\n\n**Quy ước tên**: starter chính thức là `spring-boot-starter-*`; starter bên thứ ba nên đặt `<tên>-spring-boot-starter` để phân biệt rõ nguồn gốc.",
+		"code": "<!-- Không cần ghi version: BOM đã quản lý -->\n<parent>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-parent</artifactId>\n    <version>3.3.4</version>\n</parent>\n\n<dependencies>\n    <dependency>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-starter-web</artifactId>\n    </dependency>\n</dependencies>\n\n<!-- Ghi đè có chủ đích -->\n<properties><jackson-bom.version>2.17.2</jackson-bom.version></properties>",
+		"tags": [
+			"starter",
+			"bom",
+			"dependency-management",
+			"maven"
+		],
+		"quiz": {
+			"options": [
+				"BOM của Spring Boot khai báo bộ phiên bản đã được kiểm thử tương thích, nên không cần ghi `<version>`",
+				"Starter chứa phần lớn code thực thi của framework",
+				"Không thể ghi đè phiên bản thư viện mà BOM đã quản lý",
+				"Starter bên thứ ba nên đặt tên theo dạng `spring-boot-starter-<tên>`"
+			],
+			"correct": 0,
+			"explanation": "Starter gần như chỉ có `pom.xml`. Ghi đè phiên bản được bằng property, và starter bên thứ ba nên đặt `<tên>-spring-boot-starter` để tránh nhầm với starter chính thức."
+		}
+	},
+	{
+		"id": "spring-boot-006",
+		"topic": "spring-boot",
+		"difficulty": "medium",
+		"question": "Test một ứng dụng Spring Boot có những mức nào? `@SpringBootTest` khác `@WebMvcTest` ra sao?",
+		"answerShort": "`@SpringBootTest` nạp **toàn bộ** context — chậm, dùng cho integration test. Test lát cắt (`@WebMvcTest`, `@DataJpaTest`, `@JsonTest`) chỉ nạp phần liên quan nên nhanh hơn nhiều. Unit test thuần thì không cần Spring.",
+		"answerLong": "**Kim tự tháp test cho ứng dụng Spring**:\n\n1. **Unit test thuần** — `new` class ra và mock dependency. Không có Spring, chạy mili giây. Đây phải là phần lớn nhất của bộ test.\n2. **Test lát cắt (slice test)** — chỉ nạp một phần context:\n   - `@WebMvcTest(UserController.class)` — chỉ tầng web: controller, `@ControllerAdvice`, converter. Service phải `@MockitoBean` (từ Boot 3.4; trước đó là `@MockBean`).\n   - `@DataJpaTest` — chỉ JPA + database in-memory, mỗi test tự rollback.\n   - `@JsonTest`, `@RestClientTest`, `@DataRedisTest`.\n3. **`@SpringBootTest`** — toàn bộ context. Dùng `webEnvironment = RANDOM_PORT` cùng `TestRestTemplate`/`WebTestClient` để test end-to-end thật sự qua HTTP.\n\n**Vì sao chọn đúng mức lại quan trọng**: nạp toàn bộ context mất vài giây; nhân với hàng trăm test là bộ test chạy mười phút và không ai còn chạy nó nữa.\n\n**Cache context** — Spring cache context theo **cấu hình** của test. Test có cùng annotation và cùng property dùng lại chung context. Mỗi biến thể cấu hình (`@MockitoBean` khác nhau, property khác nhau) tạo ra một context mới. Vì thế nên giữ số lượng cấu hình test ở mức tối thiểu.\n\n**Testcontainers** là cách đúng để test với database thật. Từ Boot 3.1, `@ServiceConnection` tự nối thuộc tính kết nối vào container — không cần cấu hình `datasource.url` thủ công nữa.\n\n**`@Transactional` trong test** tự rollback sau mỗi test. Tiện nhưng cần nhớ: nó có thể che giấu lỗi vì mọi thứ ở trong cùng một transaction và persistence context — vấn đề flush chỉ lộ ra trên production.",
+		"code": "@WebMvcTest(UserController.class)\nclass UserControllerTest {\n    @Autowired MockMvc mvc;\n    @MockitoBean UserService service;          // Boot 3.4+; trước đó là @MockBean\n\n    @Test void tra_ve_404_khi_khong_tim_thay() throws Exception {\n        given(service.find(1L)).willReturn(Optional.empty());\n        mvc.perform(get(\"/users/1\")).andExpect(status().isNotFound());\n    }\n}\n\n@SpringBootTest @Testcontainers\nclass OrderIT {\n    @Container @ServiceConnection\n    static PostgreSQLContainer<?> db = new PostgreSQLContainer<>(\"postgres:16\");\n}",
+		"tags": [
+			"testing",
+			"webmvctest",
+			"springboottest",
+			"testcontainers"
+		],
+		"quiz": {
+			"options": [
+				"`@WebMvcTest` nạp toàn bộ context giống `@SpringBootTest`",
+				"Spring cache context theo cấu hình test, nên càng nhiều biến thể cấu hình thì bộ test càng chậm",
+				"`@DataJpaTest` yêu cầu phải có database thật đang chạy",
+				"Unit test cho service bắt buộc phải nạp Spring context"
+			],
+			"correct": 1,
+			"explanation": "Đây là yếu tố ảnh hưởng lớn nhất tới tốc độ bộ test. `@WebMvcTest` chỉ nạp tầng web, `@DataJpaTest` mặc định dùng database in-memory, và unit test cho service không cần Spring."
+		}
+	},
+	{
+		"id": "spring-boot-007",
+		"topic": "spring-boot",
+		"difficulty": "medium",
+		"question": "Ứng dụng Spring Boot khởi động qua những bước nào?",
+		"answerShort": "`SpringApplication.run()` suy ra loại ứng dụng → nạp initializer/listener → chuẩn bị `Environment` → tạo context → refresh (auto-configuration, tạo bean, khởi động web server) → chạy `ApplicationRunner`.",
+		"answerLong": "**Các bước chi tiết**:\n\n1. Tạo `SpringApplication`, **suy ra loại ứng dụng** (servlet / reactive / none) dựa trên class có mặt trên classpath.\n2. Nạp `ApplicationContextInitializer` và `ApplicationListener` từ `spring.factories`.\n3. Suy ra class chính (`main`) bằng cách phân tích stack trace.\n4. `run()`: khởi động `StopWatch`, phát sự kiện `ApplicationStartingEvent`.\n5. Chuẩn bị `Environment` — nạp property source theo thứ tự ưu tiên, áp profile. Phát `ApplicationEnvironmentPreparedEvent` (đây là lúc Spring Cloud Config kéo cấu hình từ xa về).\n6. In banner.\n7. Tạo `ApplicationContext` đúng loại.\n8. Chuẩn bị context: chạy initializer, nạp bean definition từ class chính.\n9. **`refresh()`** — phần nặng nhất: chạy `BeanFactoryPostProcessor` (auto-configuration diễn ra ở đây), đăng ký `BeanPostProcessor`, khởi tạo mọi singleton, khởi động web server nhúng.\n10. Phát `ApplicationStartedEvent`, chạy `ApplicationRunner` và `CommandLineRunner` theo `@Order`.\n11. Phát `ApplicationReadyEvent` — thời điểm đúng để bắt đầu nhận traffic.\n\n**Chỗ móc vào hữu ích**:\n\n- `ApplicationRunner`/`CommandLineRunner` — chạy code sau khi context sẵn sàng (nạp dữ liệu mẫu, kiểm tra khởi động).\n- `@EventListener(ApplicationReadyEvent.class)` — sạch hơn Runner khi chỉ cần một hành động.\n- `ApplicationContextInitializer` — can thiệp **trước** khi refresh, dùng cho cấu hình ở tầng rất thấp.\n\n**Chẩn đoán khởi động chậm**: `ApplicationStartup` (`BufferingApplicationStartup`) ghi lại thời gian từng bước và xem được qua Actuator `/actuator/startup`. Nguyên nhân phổ biến: component scan quá rộng, khởi tạo eager cho thứ đáng ra phải lười, kết nối mạng lúc khởi động.",
+		"code": "@SpringBootApplication\npublic class App {\n    public static void main(String[] args) {\n        var app = new SpringApplication(App.class);\n        app.setApplicationStartup(new BufferingApplicationStartup(2048)); // đo thời gian khởi động\n        app.run(args);\n    }\n}\n\n@Component\nclass Warmup implements ApplicationRunner {\n    public void run(ApplicationArguments args) { cache.preload(); }\n}",
+		"tags": [
+			"startup",
+			"lifecycle",
+			"applicationrunner",
+			"events"
+		],
+		"quiz": {
+			"options": [
+				"`CommandLineRunner` chạy trước khi `ApplicationContext` được refresh",
+				"Auto-configuration được xử lý trong pha `refresh()` của context, trước khi các singleton được khởi tạo",
+				"`ApplicationReadyEvent` được phát trước `ApplicationStartedEvent`",
+				"Loại ứng dụng (servlet/reactive) phải khai báo thủ công trong cấu hình"
+			],
+			"correct": 1,
+			"explanation": "Auto-configuration chạy trong `BeanFactoryPostProcessor` ở pha refresh. Runner chạy **sau** refresh, `ApplicationReadyEvent` là sự kiện cuối, và loại ứng dụng được suy ra từ classpath."
+		}
+	},
+	{
+		"id": "spring-boot-008",
+		"topic": "spring-boot",
+		"difficulty": "hard",
+		"question": "Làm sao tối ưu thời gian khởi động và bộ nhớ của Spring Boot trong container?",
+		"answerShort": "Bốn hướng: thu hẹp component scan và bỏ auto-configuration thừa; bật lazy initialization; dùng CDS/AppCDS để chia sẻ class đã nạp; và GraalVM Native Image cho khởi động dưới 100ms.",
+		"answerLong": "**1. Giảm việc phải làm lúc khởi động**\n\n- Thu hẹp phạm vi `@ComponentScan` — quét cả cây package lớn rất tốn thời gian.\n- Loại auto-configuration không dùng: chạy `--debug` để xem cái nào đang được kích hoạt.\n- `spring.main.lazy-initialization=true` — bean chỉ tạo khi được dùng lần đầu. Rút ngắn khởi động rõ rệt nhưng **đẩy lỗi cấu hình sang lúc chạy** — hợp cho môi trường dev, cân nhắc kỹ cho production.\n- Tránh gọi mạng lúc khởi động (kiểm tra schema, tải cấu hình từ xa).\n\n**2. CDS / AppCDS** — lưu trữ dạng đã xử lý của các class được nạp, chia sẻ giữa các lần chạy JVM. Giảm khoảng 20–30% thời gian khởi động, gần như không tốn công. Spring Boot 3.3 hỗ trợ trực tiếp qua `-XX:ArchiveClassesAtExit`.\n\n**3. GraalVM Native Image** — biên dịch AOT ra binary. Khởi động ~50–100ms (nhanh hơn 10–50 lần) và tiêu tốn bộ nhớ chỉ bằng một phần nhỏ. Cái giá:\n\n- Thời gian build rất lâu (nhiều phút).\n- Reflection, proxy động và nạp tài nguyên phải được khai báo trước — Spring AOT sinh phần lớn metadata này tự động, nhưng thư viện bên ngoài có thể cần cấu hình tay.\n- Không có JIT nên **throughput đỉnh thấp hơn** JVM. Đúng cho serverless và scale-to-zero; chưa chắc đúng cho dịch vụ chạy liên tục.\n\n**4. Bộ nhớ**\n\n- `-XX:MaxRAMPercentage=70` thay cho `-Xmx` cố định.\n- Giảm `spring.datasource.hikari.maximum-pool-size` — mặc định 10 thường quá lớn cho service nhỏ.\n- Với Boot 3.2+ trên Java 21: `spring.threads.virtual.enabled=true` — mỗi request một virtual thread, không cần thread pool lớn.\n\n**Nguyên tắc**: đo trước bằng `/actuator/startup`, đừng đoán.",
+		"code": "# CDS: chạy một lần để tạo archive, rồi dùng lại\njava -XX:ArchiveClassesAtExit=app.jsa -jar app.jar\njava -XX:SharedArchiveFile=app.jsa -jar app.jar\n\n# Native image\n./mvnw -Pnative native:compile\n\n# Cấu hình container\nspring.main.lazy-initialization: true      # cân nhắc kỹ cho production\nspring.threads.virtual.enabled: true       # Boot 3.2+ trên Java 21\nspring.datasource.hikari.maximum-pool-size: 5",
+		"tags": [
+			"startup-time",
+			"native-image",
+			"cds",
+			"lazy-initialization"
+		],
+		"quiz": {
+			"options": [
+				"GraalVM Native Image cho throughput đỉnh cao hơn JVM vì đã biên dịch sẵn",
+				"`spring.main.lazy-initialization=true` không có nhược điểm nào",
+				"Native Image khởi động rất nhanh và tốn ít bộ nhớ, nhưng throughput đỉnh thấp hơn JVM vì không có JIT",
+				"CDS yêu cầu phải viết lại ứng dụng theo mô hình lập trình khác"
+			],
+			"correct": 2,
+			"explanation": "JIT tối ưu dựa trên profile lúc chạy nên throughput đỉnh của JVM cao hơn. Lazy init đẩy lỗi cấu hình sang lúc chạy, còn CDS chỉ là cờ JVM, không đụng tới code."
+		}
+	},
+	{
+		"id": "spring-boot-009",
+		"topic": "spring-boot",
+		"difficulty": "medium",
+		"question": "`@ConfigurationProperties` khác `@Value` thế nào? Khi nào dùng cái nào?",
+		"answerShort": "`@Value` tiêm một giá trị lẻ bằng SpEL. `@ConfigurationProperties` ánh xạ cả nhóm property vào một object có kiểu — hỗ trợ validation, relaxed binding, kiểu phức tạp và gợi ý trong IDE. Nhóm cấu hình thì luôn chọn cái sau.",
+		"answerLong": "| | `@Value` | `@ConfigurationProperties` |\n|---|---|---|\n| Phạm vi | một giá trị | cả nhóm theo prefix |\n| Relaxed binding | không | có (`my-prop` = `myProp` = `MY_PROP`) |\n| Validation (JSR-303) | không | có, qua `@Validated` |\n| Kiểu phức tạp | rất hạn chế | `List`, `Map`, `Duration`, `DataSize`, object lồng nhau |\n| SpEL | có | không |\n| Metadata cho IDE | không | có |\n| Test | phải nạp context | `new` object ra là test được |\n\n**Vì sao `@ConfigurationProperties` tốt hơn cho hầu hết trường hợp**:\n\n1. **An toàn kiểu** — sai kiểu bị bắt lúc khởi động chứ không phải lúc chạy.\n2. **Validation** — `@Validated` cùng `@NotBlank`, `@Min` khiến cấu hình sai làm ứng dụng **fail fast** ngay khi khởi động, thay vì hỏng lúc 3 giờ sáng.\n3. **Nhóm lại có ý nghĩa** — mọi cấu hình liên quan nằm trong một object, đọc là hiểu.\n4. **Chuyển đổi kiểu sẵn có** — `Duration` (`30s`, `5m`), `DataSize` (`10MB`), `Period`.\n5. **Test dễ** — chỉ cần `new` record ra với giá trị mong muốn.\n\n**Khi `@Value` vẫn hợp lý**: một giá trị lẻ không thuộc nhóm nào, hoặc cần biểu thức SpEL.\n\n**Cách dùng**: `@ConfigurationProperties` trên `record` (immutable, gọn nhất) hoặc class có setter, kích hoạt bằng `@EnableConfigurationProperties(X.class)` hoặc `@ConfigurationPropertiesScan`.\n\n**Mẹo**: thêm `spring-boot-configuration-processor` vào dependency để sinh metadata — IDE sẽ tự động gợi ý và kiểm tra khoá trong `application.yml`.",
+		"code": "@ConfigurationProperties(prefix = \"app.storage\")\n@Validated\npublic record StorageProperties(\n    @NotBlank String bucket,\n    @DefaultValue(\"10MB\") DataSize maxFileSize,\n    @DefaultValue(\"30s\") Duration timeout,\n    List<String> allowedTypes,\n    Retry retry\n) {\n    public record Retry(@Min(0) int maxAttempts, Duration backoff) {}\n}\n\napp.storage:\n  bucket: my-bucket\n  max-file-size: 20MB      # relaxed binding + chuyển kiểu tự động\n  retry: { max-attempts: 3, backoff: 500ms }",
+		"tags": [
+			"configurationproperties",
+			"value",
+			"validation",
+			"type-safety"
+		],
+		"quiz": {
+			"options": [
+				"`@Value` hỗ trợ relaxed binding và validation JSR-303",
+				"`@ConfigurationProperties` hỗ trợ SpEL còn `@Value` thì không",
+				"`@ConfigurationProperties` cho phép validate cấu hình lúc khởi động và tự chuyển đổi sang `Duration`, `DataSize`",
+				"Cả hai đều yêu cầu nạp Spring context mới test được"
+			],
+			"correct": 2,
+			"explanation": "Validate lúc khởi động là ưu điểm lớn nhất — cấu hình sai làm ứng dụng fail fast. `@Value` mới là bên hỗ trợ SpEL, và `@ConfigurationProperties` test được bằng cách `new` object."
+		}
+	},
+	{
+		"id": "spring-boot-010",
+		"topic": "spring-boot",
+		"difficulty": "medium",
+		"question": "Cấu trúc jar thực thi của Spring Boot khác jar thường thế nào?",
+		"answerShort": "Boot đóng gói thành **fat jar** với layout riêng: code ứng dụng ở `BOOT-INF/classes`, dependency ở `BOOT-INF/lib`, và một `JarLauncher` ở gốc biết cách nạp jar lồng trong jar — điều mà classloader chuẩn không làm được.",
+		"answerLong": "**Vấn đề**: đặc tả jar chuẩn **không hỗ trợ jar lồng trong jar**. Cách truyền thống là \"shade\" — bung tất cả class của mọi dependency vào cùng một cây thư mục. Cách đó gây xung đột file tài nguyên trùng tên (`META-INF/services`, `application.properties`) và làm mất dấu nguồn gốc của từng class.\n\n**Cách của Boot**:\n\n```\napp.jar\n├── META-INF/MANIFEST.MF        Main-Class: JarLauncher\n│                               Start-Class: com.example.App\n├── org/springframework/boot/loader/...   (JarLauncher và bộ nạp)\n└── BOOT-INF/\n    ├── classes/                code + resource của ứng dụng\n    ├── lib/                    các jar dependency, giữ nguyên\n    └── classpath.idx           thứ tự classpath\n```\n\nKhi chạy, `JarLauncher` được gọi trước; nó dựng một classloader hiểu jar lồng nhau, rồi mới gọi `Start-Class` thật của bạn. Dependency giữ nguyên dạng jar nên không có xung đột tài nguyên.\n\n**Layered jar** (Boot 2.3+) — chia thành các tầng theo tần suất thay đổi: `dependencies`, `spring-boot-loader`, `snapshot-dependencies`, `application`. Mỗi tầng thành một layer Docker riêng. Vì code ứng dụng đổi thường xuyên còn dependency thì hiếm, build lại chỉ thay layer cuối — image nhỏ đi rất nhiều khi đẩy lên registry.\n\n**Buildpacks**: `mvn spring-boot:build-image` tạo image OCI tối ưu sẵn mà không cần viết `Dockerfile` — đã có layer, JVM phù hợp và cấu hình bộ nhớ theo container.\n\n**WAR truyền thống** vẫn hỗ trợ: đổi packaging sang `war`, kế thừa `SpringBootServletInitializer`, và đánh dấu Tomcat nhúng là `provided`.",
+		"code": "# Dockerfile nhiều tầng, tận dụng cache theo layer\nFROM eclipse-temurin:21-jre AS builder\nWORKDIR /app\nCOPY target/app.jar app.jar\nRUN java -Djarmode=layertools -jar app.jar extract\n\nFROM eclipse-temurin:21-jre\nWORKDIR /app\nCOPY --from=builder /app/dependencies/ ./\nCOPY --from=builder /app/spring-boot-loader/ ./\nCOPY --from=builder /app/snapshot-dependencies/ ./\nCOPY --from=builder /app/application/ ./\nENTRYPOINT [\"java\", \"org.springframework.boot.loader.launch.JarLauncher\"]",
+		"tags": [
+			"fat-jar",
+			"jarlauncher",
+			"layered-jar",
+			"docker"
+		],
+		"quiz": {
+			"options": [
+				"Spring Boot bung toàn bộ class của dependency vào cùng một thư mục như plugin shade",
+				"Jar thực thi của Boot giữ nguyên dependency dưới dạng jar trong `BOOT-INF/lib` và dùng `JarLauncher` để nạp",
+				"`Main-Class` trong manifest trỏ thẳng tới class `main` của ứng dụng",
+				"Layered jar làm tăng kích thước image Docker"
+			],
+			"correct": 1,
+			"explanation": "Giữ nguyên dạng jar tránh được xung đột tài nguyên. `Main-Class` là `JarLauncher`, còn class thật nằm ở `Start-Class`; layered jar giúp tận dụng cache nên **giảm** dung lượng phải đẩy lên registry."
+		}
+	}
+]

@@ -1,0 +1,282 @@
+[
+	{
+		"id": "java-core-001",
+		"topic": "java-core",
+		"difficulty": "easy",
+		"question": "Phân biệt `==` và `equals()` khi so sánh object trong Java?",
+		"answerShort": "`==` so sánh reference (cùng một object trên heap hay không). `equals()` so sánh nội dung theo cách class tự định nghĩa — nhưng `Object.equals()` mặc định vẫn chỉ là `==`.",
+		"answerLong": "Với **primitive** (`int`, `double`, `char`...) thì `==` so sánh giá trị — đây là cách duy nhất, vì primitive không có method.\n\nVới **object**, `==` so sánh reference: hai biến có trỏ vào cùng một vùng nhớ trên heap không.\n\n`equals()` là method của `Object`. Bản mặc định là `return (this == obj);` — nghĩa là nếu class không override, `equals()` **không** so sánh nội dung. `String`, các lớp wrapper, `record`, và hầu hết lớp trong JDK đều đã override.\n\nBẫy hay gặp:\n\n- **String pool**: literal `\"x\" == \"x\"` trả `true` vì cùng nằm trong string pool, nhưng `new String(\"x\") == \"x\"` trả `false`. Đây là lý do không bao giờ so sánh String bằng `==`.\n- **Integer cache**: `Integer` từ -128 đến 127 được cache, nên `Integer a = 127, b = 127; a == b` là `true`, còn `128 == 128` lại `false`. Autoboxing khiến bug này rất khó thấy.\n- Khi override `equals()` phải override cả `hashCode()`.\n\nSo sánh an toàn với giá trị có thể null: `Objects.equals(a, b)`.",
+		"code": "String a = new String(\"x\");\nString b = \"x\";\nSystem.out.println(a == b);        // false — khác reference\nSystem.out.println(a.equals(b));   // true  — cùng nội dung\n\nInteger m = 127, n = 127;\nInteger p = 128, q = 128;\nSystem.out.println(m == n);        // true  — nằm trong Integer cache\nSystem.out.println(p == q);        // false — ngoài cache, hai object khác nhau",
+		"tags": ["equals", "reference", "string-pool", "autoboxing"],
+		"quiz": {
+			"options": [
+				"`==` luôn so sánh nội dung của object",
+				"`Object.equals()` mặc định so sánh reference, giống hệt `==`",
+				"JVM tự động override `equals()` cho mọi class do người dùng viết",
+				"`==` không dùng được với kiểu primitive"
+			],
+			"correct": 1,
+			"explanation": "`Object.equals()` được cài đặt là `return (this == obj)`. Muốn so sánh nội dung thì class phải tự override — JVM không làm điều đó thay bạn."
+		}
+	},
+	{
+		"id": "java-core-002",
+		"topic": "java-core",
+		"difficulty": "medium",
+		"question": "Hợp đồng giữa `equals()` và `hashCode()` là gì? Chuyện gì xảy ra nếu chỉ override một trong hai?",
+		"answerShort": "Hai object `equals()` nhau **bắt buộc** có cùng `hashCode()`. Chiều ngược lại không bắt buộc. Chỉ override `equals()` mà quên `hashCode()` khiến object biến mất trong `HashMap`/`HashSet`.",
+		"answerLong": "Hợp đồng theo Javadoc của `Object`:\n\n1. Gọi `hashCode()` nhiều lần trên cùng object (không đổi trạng thái) phải trả về cùng giá trị.\n2. `a.equals(b) == true` ⟹ `a.hashCode() == b.hashCode()`.\n3. `a.hashCode() == b.hashCode()` **không** suy ra `a.equals(b)` — đó là hash collision, hoàn toàn hợp lệ.\n\nNếu chỉ override `equals()`: hai object bằng nhau về nội dung nhưng có hash khác nhau (hash mặc định dựa trên identity). `HashMap` tìm bucket theo hash, nên `map.get(keyBangNoiDung)` sẽ nhìn sai bucket và trả `null` — object \"biến mất\" dù `contains` theo logic nghiệp vụ là đúng.\n\nNếu chỉ override `hashCode()`: các object cùng nội dung rơi vào cùng bucket nhưng `equals()` identity vẫn nói chúng khác nhau, nên `HashSet` chứa bản trùng lặp.\n\n`equals()` còn phải thoả: phản xạ, đối xứng, bắc cầu, nhất quán, và `x.equals(null) == false`. Tính đối xứng là chỗ hay hỏng nhất khi so sánh giữa class cha và class con — đó là lý do nên dùng `getClass() != o.getClass()` thay vì `instanceof` khi class có thể được kế thừa.\n\nThực tế: dùng `record` (tự sinh cả hai), hoặc IDE generate, hoặc `Objects.hash(...)`. **Đừng** đưa field mutable vào `hashCode()` nếu object được dùng làm key.",
+		"code": "public final class Point {\n    private final int x, y;\n\n    @Override public boolean equals(Object o) {\n        if (this == o) return true;\n        if (o == null || getClass() != o.getClass()) return false;\n        Point p = (Point) o;\n        return x == p.x && y == p.y;\n    }\n\n    @Override public int hashCode() {\n        return Objects.hash(x, y);\n    }\n}\n\n// Từ Java 16 chỉ cần:\nrecord Point(int x, int y) {}",
+		"tags": ["equals", "hashcode", "hashmap", "contract"],
+		"quiz": {
+			"options": [
+				"Hai object có cùng `hashCode()` thì bắt buộc phải `equals()` nhau",
+				"Chỉ override `hashCode()` mà không override `equals()` là an toàn tuyệt đối",
+				"Hai object `equals()` nhau bắt buộc phải có cùng `hashCode()`",
+				"`hashCode()` phải luôn trả về giá trị duy nhất cho mỗi object"
+			],
+			"correct": 2,
+			"explanation": "Chỉ có chiều equals ⟹ cùng hashCode là bắt buộc. Cùng hashCode mà khác nội dung là collision — hợp lệ và không thể tránh, vì `int` chỉ có 2^32 giá trị."
+		}
+	},
+	{
+		"id": "java-core-003",
+		"topic": "java-core",
+		"difficulty": "easy",
+		"question": "Overloading và overriding khác nhau thế nào?",
+		"answerShort": "Overloading: cùng tên method, khác danh sách tham số, phân giải lúc **compile-time** (static binding). Overriding: class con viết lại method của class cha, phân giải lúc **runtime** theo type thật của object.",
+		"answerLong": "**Overloading (nạp chồng)** xảy ra trong cùng một class (hoặc kế thừa xuống): nhiều method cùng tên nhưng khác về số lượng/kiểu/thứ tự tham số. Kiểu trả về **không** tham gia phân biệt — chỉ khác return type là lỗi biên dịch. Compiler chọn overload nào dựa trên **kiểu khai báo** của biến, quyết định ngay lúc biên dịch.\n\n**Overriding (ghi đè)** xảy ra giữa class cha và class con: cùng chữ ký, class con thay đổi hành vi. JVM chọn method theo **kiểu thật** của object lúc chạy (dynamic dispatch) — đây chính là cơ chế của đa hình.\n\nRàng buộc khi override:\n\n- Access modifier không được hẹp hơn (`protected` → `public` được, ngược lại thì không).\n- Không được ném checked exception rộng hơn.\n- Return type được phép hẹp hơn (covariant return).\n- `static`, `private`, `final` method không override được. Định nghĩa lại `static` method ở class con gọi là **hiding**, không phải overriding — và nó phân giải theo kiểu khai báo, một nguồn bug kinh điển.\n\nLuôn đánh `@Override`: nó biến lỗi \"tưởng là override nhưng thực ra là overload\" từ bug runtime thành lỗi biên dịch.",
+		"code": "class Parent {\n    void greet(Object o) { System.out.println(\"Parent-Object\"); }\n    static void s() { System.out.println(\"Parent-static\"); }\n}\n\nclass Child extends Parent {\n    void greet(String s) { System.out.println(\"Child-String\"); } // OVERLOAD, không phải override\n    static void s() { System.out.println(\"Child-static\"); }      // HIDING\n}\n\nParent p = new Child();\np.greet(\"hello\"); // \"Parent-Object\" — compiler chọn theo kiểu khai báo Parent\np.s();            // \"Parent-static\" — static bám theo kiểu khai báo",
+		"tags": ["overloading", "overriding", "polymorphism", "static-binding"],
+		"quiz": {
+			"options": [
+				"Overloading được phân giải lúc runtime, overriding lúc compile-time",
+				"Hai method chỉ khác nhau ở kiểu trả về là một cặp overload hợp lệ",
+				"Overloading phân giải lúc compile-time theo kiểu khai báo; overriding phân giải lúc runtime theo kiểu thật",
+				"`static` method có thể được override để đạt đa hình"
+			],
+			"correct": 2,
+			"explanation": "Overload chọn theo kiểu khai báo lúc biên dịch. Override chọn theo kiểu thật lúc chạy. `static` method chỉ bị che (hiding), không tham gia dynamic dispatch."
+		}
+	},
+	{
+		"id": "java-core-004",
+		"topic": "java-core",
+		"difficulty": "medium",
+		"question": "Abstract class và interface: khi nào dùng cái nào?",
+		"answerShort": "Interface mô tả **năng lực** (\"làm được gì\"), cho phép implement nhiều. Abstract class mô tả **danh tính** (\"là cái gì\") và chia sẻ state + code chung, nhưng chỉ kế thừa được một.",
+		"answerLong": "Từ Java 8+ ranh giới đã mờ đi nhiều, nên so sánh cần cập nhật:\n\n| | interface | abstract class |\n|---|---|---|\n| Số lượng kế thừa | nhiều | một |\n| Field | chỉ `public static final` | field instance bất kỳ |\n| Constructor | không có | có |\n| Method có thân | `default`, `static`, `private` (Java 9+) | có |\n| Access modifier | `public` (và `private` cho helper) | mọi mức |\n| State | không giữ được | giữ được |\n\nQuy tắc chọn trong thực tế:\n\n- Cần **giữ state** hoặc constructor → abstract class.\n- Nhiều class không liên quan cùng có một năng lực (`Comparable`, `Serializable`, `AutoCloseable`) → interface.\n- Muốn API mở rộng được về sau mà không phá code cũ → interface + `default` method.\n- Nghi ngờ thì chọn interface: nó ít ràng buộc hơn và không tiêu mất suất kế thừa duy nhất.\n\n`default` method sinh ra để giải quyết bài toán tương thích ngược: Java 8 thêm `stream()` vào `Collection` mà không làm vỡ hàng nghìn implementation có sẵn. Nếu một class implement hai interface có cùng `default` method, compiler bắt buộc phải override và chỉ rõ `Interface.super.method()`.",
+		"code": "interface Payable {\n    BigDecimal amount();\n    default boolean isFree() { return amount().signum() == 0; } // thêm sau vẫn không phá code cũ\n}\n\nabstract class AbstractRepository<T> {\n    protected final DataSource ds; // state chung — interface không làm được\n    protected AbstractRepository(DataSource ds) { this.ds = ds; }\n    abstract T findById(long id);\n}",
+		"tags": ["interface", "abstract-class", "default-method", "design"],
+		"quiz": {
+			"options": [
+				"Interface từ Java 8 có thể chứa field instance để giữ state",
+				"Abstract class cho phép kế thừa nhiều lớp cha cùng lúc",
+				"Interface có thể có `default` và `static` method, nhưng không giữ được state instance",
+				"Từ Java 8, interface và abstract class hoàn toàn tương đương nhau"
+			],
+			"correct": 2,
+			"explanation": "Field trong interface luôn ngầm là `public static final` — hằng số, không phải state của instance. Đây vẫn là khác biệt cốt lõi so với abstract class."
+		}
+	},
+	{
+		"id": "java-core-005",
+		"topic": "java-core",
+		"difficulty": "medium",
+		"question": "Vì sao `String` là immutable? Điều đó mang lại lợi ích gì?",
+		"answerShort": "Field `value` là `private final byte[]` và không có setter nào. Immutable cho phép string pool tái sử dụng, cache `hashCode`, an toàn thread mặc định, và an toàn khi làm key của Map hay tham số bảo mật.",
+		"answerLong": "**Cài đặt**: `String` là `final class`, chứa `private final byte[] value` (từ Java 9 là byte array + coder, trước đó là `char[]`), không phơi ra tham chiếu mảng, và không có method nào sửa nội dung — `substring`, `concat`, `replace` đều trả về String mới.\n\n**Lợi ích**:\n\n1. **String pool**: vì không sửa được nên nhiều biến chia sẻ chung một instance an toàn. Literal được intern tự động, tiết kiệm bộ nhớ đáng kể trong ứng dụng thật.\n2. **Cache hashCode**: `String` lưu `hash` sau lần tính đầu tiên. Nhờ vậy `String` làm key `HashMap` cực nhanh — điều này chỉ hợp lệ khi nội dung không đổi.\n3. **Thread-safe miễn phí**: không cần đồng bộ khi chia sẻ giữa thread.\n4. **Bảo mật**: đường dẫn file, URL, class name, tham số kết nối DB đều là String. Nếu mutable, một thread có thể sửa giá trị **sau** khi đã qua bước kiểm tra quyền — lỗ hổng TOCTOU kinh điển.\n\n**Cái giá**: nối chuỗi trong vòng lặp bằng `+` tạo ra O(n²) object rác. Dùng `StringBuilder` (không đồng bộ, nhanh) hoặc `StringBuffer` (đồng bộ, hầu như không cần đến).\n\nLưu ý bảo mật ngược lại: chính vì immutable nên **không** nên giữ password trong `String` — không xoá chủ động khỏi bộ nhớ được. Dùng `char[]` và `Arrays.fill(pw, '\\0')` sau khi dùng xong.",
+		"code": "String s = \"a\";\nfor (int i = 0; i < 10_000; i++) s += i;   // ~10.000 String rác — O(n^2)\n\nStringBuilder sb = new StringBuilder();\nfor (int i = 0; i < 10_000; i++) sb.append(i);\nString fast = sb.toString();               // một lần cấp phát cuối cùng",
+		"tags": ["string", "immutable", "string-pool", "stringbuilder"],
+		"quiz": {
+			"options": [
+				"`String` immutable nên `hashCode` được cache lại sau lần tính đầu tiên",
+				"`String` immutable vì được đánh dấu `final class`, còn nội dung vẫn sửa được qua reflection an toàn",
+				"Nối chuỗi bằng `+` trong vòng lặp được compiler tự tối ưu thành `StringBuilder` một lần duy nhất",
+				"Nên lưu password trong `String` vì `String` an toàn thread"
+			],
+			"correct": 0,
+			"explanation": "Cache `hashCode` là hệ quả trực tiếp của immutability. Compiler chỉ tối ưu `+` trong **một** biểu thức, không gộp được qua các vòng lặp. Password nên dùng `char[]` để xoá chủ động được."
+		}
+	},
+	{
+		"id": "java-core-006",
+		"topic": "java-core",
+		"difficulty": "medium",
+		"question": "Java truyền tham số theo pass-by-value hay pass-by-reference?",
+		"answerShort": "Java **luôn** pass-by-value. Với object, cái được copy là giá trị của reference — nên sửa nội dung object bên trong method thì thấy được, còn gán lại biến thì không ảnh hưởng bên ngoài.",
+		"answerLong": "Đây là câu hỏi bẫy phổ biến nhất, và cách trả lời \"pass-by-reference cho object\" là sai.\n\nKhi gọi method, Java copy **giá trị** của biến vào tham số:\n\n- Primitive: copy giá trị số. Sửa trong method không ảnh hưởng ra ngoài.\n- Object: copy **giá trị của reference** (địa chỉ). Cả hai reference cùng trỏ vào một object trên heap.\n\nHệ quả:\n\n- `list.add(x)` bên trong method → bên ngoài **thấy** thay đổi, vì cùng object.\n- `list = new ArrayList<>()` bên trong method → bên ngoài **không** thấy, vì chỉ có bản copy của reference bị trỏ đi chỗ khác.\n\nNếu Java thật sự là pass-by-reference thì method `swap(a, b)` sẽ hoán đổi được hai biến ở phía gọi. Nó không làm được — đó là bằng chứng dứt điểm.",
+		"code": "static void mutate(List<String> list) {\n    list.add(\"added\");          // thấy được bên ngoài\n    list = new ArrayList<>();   // chỉ đổi bản copy của reference\n    list.add(\"invisible\");      // KHÔNG thấy được bên ngoài\n}\n\nList<String> l = new ArrayList<>();\nmutate(l);\nSystem.out.println(l); // [added]",
+		"tags": ["pass-by-value", "reference", "method-call"],
+		"quiz": {
+			"options": [
+				"Java dùng pass-by-reference cho object và pass-by-value cho primitive",
+				"Java luôn pass-by-value; với object thì giá trị được copy chính là reference",
+				"Gán lại tham số object bên trong method sẽ thay đổi biến ở phía gọi",
+				"Có thể viết method `swap(a, b)` hoán đổi hai biến object ở phía gọi"
+			],
+			"correct": 1,
+			"explanation": "Java chỉ có pass-by-value. Reference được copy nên sửa **nội dung** object thì thấy, nhưng gán lại biến tham số thì không — và cũng vì thế `swap` là bất khả thi."
+		}
+	},
+	{
+		"id": "java-core-007",
+		"topic": "java-core",
+		"difficulty": "medium",
+		"question": "Làm sao để thiết kế một class immutable đúng chuẩn?",
+		"answerShort": "Class `final`, mọi field `private final`, không setter, khởi tạo hoàn toàn trong constructor, và **defensive copy** cho mọi field kiểu mutable ở cả constructor lẫn getter.",
+		"answerLong": "Sáu quy tắc:\n\n1. Đánh dấu class là `final` (hoặc để mọi constructor `private` + dùng factory) — chặn class con thêm state mutable.\n2. Mọi field `private final`.\n3. Không có setter, không có method nào đổi state.\n4. Gán toàn bộ state trong constructor.\n5. **Defensive copy khi nhận vào**: nếu constructor nhận `List` hay `Date`, phải copy — nếu không, phía gọi vẫn giữ reference và sửa được nội dung object của bạn.\n6. **Defensive copy khi trả ra**: getter trả `List.copyOf(items)` hoặc `Collections.unmodifiableList(...)`, không trả thẳng field.\n\nBước 5 và 6 là chỗ hầu hết code sai. `final` chỉ đảm bảo **reference** không đổi, hoàn toàn không cấm sửa nội dung object được trỏ tới.\n\nTừ Java 16, `record` lo giúp bước 1–4 và sinh sẵn `equals`/`hashCode`/`toString`, nhưng **vẫn không** tự defensive copy — vẫn phải viết compact constructor nếu có field kiểu collection.\n\nƯu tiên `List.copyOf()` hơn `unmodifiableList()`: `copyOf` tạo bản sao thật sự, còn `unmodifiableList` chỉ là view — người giữ list gốc vẫn sửa được.",
+		"code": "public record Order(String id, List<String> items) {\n    public Order {\n        // compact constructor: copy khi nhận vào\n        items = List.copyOf(items);\n    }\n    // accessor sinh tự động đã an toàn vì items giờ là immutable list\n}\n\nList<String> src = new ArrayList<>(List.of(\"a\"));\nOrder o = new Order(\"1\", src);\nsrc.add(\"b\");\nSystem.out.println(o.items()); // [a] — không bị ảnh hưởng",
+		"tags": ["immutable", "defensive-copy", "record", "final"],
+		"quiz": {
+			"options": [
+				"Đánh dấu field là `final` đã đủ để nội dung `List` bên trong không bị sửa",
+				"`record` tự động defensive copy các field kiểu collection",
+				"Cần defensive copy ở cả constructor lẫn getter cho mọi field kiểu mutable",
+				"Class immutable không cần override `equals()` và `hashCode()`"
+			],
+			"correct": 2,
+			"explanation": "`final` chỉ khoá reference chứ không khoá nội dung. `record` cũng không tự copy — phải tự viết trong compact constructor."
+		}
+	},
+	{
+		"id": "java-core-008",
+		"topic": "java-core",
+		"difficulty": "hard",
+		"question": "Generics trong Java hoạt động thế nào? Type erasure gây ra những hạn chế gì?",
+		"answerShort": "Generics chỉ tồn tại lúc biên dịch; compiler xoá type parameter và chèn cast (type erasure). Vì thế không có `new T[]`, không `instanceof List<String>`, và không overload theo `List<String>` vs `List<Integer>`.",
+		"answerLong": "**Type erasure**: `List<String>` và `List<Integer>` sau khi biên dịch đều là `List`. Type parameter bị thay bằng bound của nó (`Object` nếu không có bound), rồi compiler chèn cast ở nơi cần. Lý do lịch sử là tương thích ngược với code trước Java 5.\n\n**Hạn chế kéo theo**:\n\n- Không `new T()` hay `new T[n]` — runtime không biết T là gì. Workaround: truyền `Class<T>` vào và dùng `clazz.getDeclaredConstructor().newInstance()`.\n- Không `instanceof List<String>` — chỉ `instanceof List<?>` được.\n- Không overload `f(List<String>)` và `f(List<Integer>)` — sau erasure chúng cùng chữ ký.\n- Không dùng type parameter trong ngữ cảnh `static`.\n- Không tạo generic exception, không `catch (T e)`.\n\n**PECS** — quy tắc chọn wildcard: *Producer Extends, Consumer Super*.\n\n- `List<? extends Number>`: chỉ **đọc** ra được (`Number`), không add được (trừ `null`), vì không biết chính xác là `List<Integer>` hay `List<Double>`.\n- `List<? super Integer>`: **ghi** `Integer` vào được, nhưng đọc ra chỉ chắc chắn là `Object`.\n\nMuốn giữ thông tin generic lúc runtime: dùng thủ thuật **super type token** — tạo anonymous subclass và đọc `getGenericSuperclass()`; đây là cách Jackson `TypeReference` và Spring `ParameterizedTypeReference` hoạt động.",
+		"code": "// Sau erasure cả hai đều là copy(List, List) -> lỗi biên dịch nếu overload\nstatic <T> void copy(List<? super T> dst, List<? extends T> src) {\n    for (T t : src) dst.add(t);   // src là producer -> extends; dst là consumer -> super\n}\n\nList<? extends Number> nums = List.of(1, 2);\n// nums.add(3);        // lỗi biên dịch — không biết kiểu thật\nNumber n = nums.get(0); // đọc thì luôn được",
+		"tags": ["generics", "type-erasure", "pecs", "wildcard"],
+		"quiz": {
+			"options": [
+				"Có thể phân biệt `List<String>` và `List<Integer>` lúc runtime bằng `instanceof`",
+				"Type erasure là lý do không thể overload `f(List<String>)` và `f(List<Integer>)`",
+				"`List<? extends Number>` cho phép add phần tử `Integer` vào bình thường",
+				"Generics của Java được reify hoàn toàn giống C#"
+			],
+			"correct": 1,
+			"explanation": "Sau erasure hai method có cùng chữ ký `f(List)`, nên compiler từ chối. `List<? extends Number>` chỉ đọc được — add bị cấm vì kiểu thật có thể là `List<Double>`."
+		}
+	},
+	{
+		"id": "java-core-009",
+		"topic": "java-core",
+		"difficulty": "easy",
+		"question": "Từ khoá `final` có những ý nghĩa nào tuỳ theo vị trí đặt?",
+		"answerShort": "`final` trên biến: gán một lần duy nhất. Trên method: không cho override. Trên class: không cho kế thừa. Với object, `final` khoá reference chứ không khoá nội dung.",
+		"answerLong": "**Biến local `final`**: phải gán trước khi dùng, gán đúng một lần. Biến được lambda hoặc anonymous class bắt buộc phải `final` hoặc *effectively final*.\n\n**Field instance `final`**: phải gán trong khai báo, khối khởi tạo, hoặc constructor. Đây còn là một đảm bảo về bộ nhớ: JMM cam kết mọi thread thấy giá trị `final` field đã được khởi tạo đầy đủ sau khi constructor kết thúc — nền tảng của thread-safety cho immutable object.\n\n**`static final`**: hằng số. Nếu là primitive/String với giá trị compile-time thì được inline thẳng vào bytecode nơi dùng — nghĩa là đổi hằng số trong thư viện mà không biên dịch lại phía dùng sẽ không có tác dụng.\n\n**Method `final`**: chặn override. Dùng khi method là bất biến của thiết kế, hoặc được gọi từ constructor.\n\n**Class `final`**: chặn kế thừa (`String`, `Integer`, `LocalDate`). Từ Java 17 có `sealed` cho phép kiểm soát mềm hơn: chỉ danh sách class chỉ định mới được kế thừa.\n\n**Tham số `final`**: chỉ có tác dụng tài liệu, ngăn gán lại trong thân method.\n\nCái bẫy duy nhất cần nhớ: `final List<String> l` vẫn cho phép `l.add(...)`.",
+		"code": "final List<String> list = new ArrayList<>();\nlist.add(\"ok\");            // hợp lệ — nội dung không bị final khoá\n// list = new ArrayList<>(); // lỗi biên dịch — reference bị khoá\n\nstatic final int MAX = 100; // được inline vào bytecode nơi sử dụng",
+		"tags": ["final", "immutable", "constant", "sealed"],
+		"quiz": {
+			"options": [
+				"`final List<String> l` khiến không thể gọi `l.add(...)`",
+				"`final` trên tham số method ngăn method thay đổi nội dung object được truyền vào",
+				"`final` trên biến object chỉ khoá reference, nội dung object vẫn sửa được",
+				"Method `final` không thể được gọi từ class con"
+			],
+			"correct": 2,
+			"explanation": "`final` khoá việc gán lại biến, không khoá trạng thái bên trong object. Method `final` vẫn kế thừa và gọi được bình thường — chỉ không override được."
+		}
+	},
+	{
+		"id": "java-core-010",
+		"topic": "java-core",
+		"difficulty": "medium",
+		"question": "`static` block, instance initializer block và constructor chạy theo thứ tự nào?",
+		"answerShort": "Static block của class cha → static block class con (một lần khi load class) → instance block cha → constructor cha → instance block con → constructor con (mỗi lần `new`).",
+		"answerLong": "Thứ tự đầy đủ khi `new Child()` lần đầu tiên:\n\n1. **Class loading + initialization**: static field và `static {}` của **Parent** theo thứ tự khai báo trong source.\n2. Static field và `static {}` của **Child**. Bước 1–2 chạy đúng **một lần** cho mỗi class loader, và được JVM đảm bảo thread-safe — đây là nền tảng của idiom singleton \"initialization-on-demand holder\".\n3. Với mỗi lần `new`: constructor Child ngầm gọi `super()` trước.\n4. Instance initializer `{}` và field initializer của Parent (theo thứ tự source), rồi thân constructor Parent.\n5. Instance initializer và field initializer của Child, rồi thân constructor Child.\n\nBẫy kinh điển: gọi một method **overridable** trong constructor của lớp cha. Lúc đó phần thân của lớp con chưa chạy, nên field của lớp con vẫn là giá trị mặc định (`0`/`null`) dù trong code có gán giá trị.\n\nĐây chính là lý do quy tắc \"không gọi method có thể bị override từ constructor\" tồn tại.",
+		"code": "class Parent {\n    Parent() { print(); }               // gọi method overridable trong constructor\n    void print() { System.out.println(\"Parent\"); }\n}\n\nclass Child extends Parent {\n    private String name = \"child\";\n    @Override void print() { System.out.println(\"name = \" + name); }\n}\n\nnew Child(); // in ra \"name = null\" — field của Child chưa được khởi tạo",
+		"tags": ["initialization", "static-block", "constructor", "class-loading"],
+		"quiz": {
+			"options": [
+				"Instance initializer block chạy trước static block mỗi lần tạo object",
+				"Static block chạy lại mỗi lần `new` một instance",
+				"Gọi method overridable trong constructor lớp cha có thể đọc phải field lớp con chưa khởi tạo",
+				"Constructor lớp con luôn chạy trước constructor lớp cha"
+			],
+			"correct": 2,
+			"explanation": "Constructor cha chạy trước khi field của con được gán, nên method bị override sẽ thấy giá trị mặc định `null`/`0`. Static block chỉ chạy một lần lúc class được initialize."
+		}
+	},
+	{
+		"id": "java-core-011",
+		"topic": "java-core",
+		"difficulty": "medium",
+		"question": "`Comparable` và `Comparator` khác nhau ra sao?",
+		"answerShort": "`Comparable.compareTo()` nằm **trong** class, định nghĩa thứ tự tự nhiên duy nhất. `Comparator.compare()` là object bên ngoài, viết được nhiều cách sắp xếp khác nhau cho cùng một class.",
+		"answerLong": "**`Comparable<T>`** — `int compareTo(T o)`, class tự implement. Mỗi class chỉ có một thứ tự tự nhiên (`String` theo lexicographic, `Integer` theo giá trị). `TreeSet`, `TreeMap`, `Collections.sort(list)` dùng nó khi không được cấp comparator.\n\n**`Comparator<T>`** — `int compare(T a, T b)`, tách rời khỏi class. Dùng khi:\n\n- Không sửa được source của class.\n- Cần nhiều tiêu chí sắp xếp khác nhau.\n- Tiêu chí phụ thuộc ngữ cảnh (locale, cấu hình người dùng).\n\nTừ Java 8, `Comparator` có bộ API tổ hợp rất gọn: `comparing`, `thenComparing`, `reversed`, `nullsFirst`, `comparingInt`.\n\n**Ba cái bẫy**:\n\n1. Cài `compare` bằng `a.value - b.value` sẽ tràn số khi hiệu vượt quá `int`. Dùng `Integer.compare(a, b)`.\n2. Comparator phải **nhất quán với equals** khi dùng trong `TreeMap`/`TreeSet` — nếu `compare` trả 0 cho hai object không `equals` nhau, `TreeSet` coi chúng là trùng và loại bớt.\n3. Comparator không thoả tính bắc cầu khiến `Arrays.sort` ném `IllegalArgumentException: Comparison method violates its general contract!` — TimSort phát hiện được vi phạm này.",
+		"code": "// Nhiều tiêu chí, đọc như câu tiếng Anh\nlist.sort(Comparator.comparing(Employee::department)\n                    .thenComparing(Employee::salary, Comparator.reverseOrder())\n                    .thenComparing(Employee::name));\n\n// Sai: tràn số khi a = Integer.MAX_VALUE, b = -1\n// (a, b) -> a.getAge() - b.getAge()\n// Đúng:\nComparator.comparingInt(Employee::getAge);",
+		"tags": ["comparable", "comparator", "sorting", "treemap"],
+		"quiz": {
+			"options": [
+				"Một class có thể implement `Comparable` nhiều lần với các thứ tự khác nhau",
+				"`Comparator` phải được cài đặt bên trong chính class cần so sánh",
+				"Viết `compare` bằng phép trừ `a - b` là cách an toàn và được khuyến nghị",
+				"Nếu `compare` trả 0 cho hai object không `equals` nhau thì `TreeSet` sẽ coi chúng là trùng"
+			],
+			"correct": 3,
+			"explanation": "`TreeSet`/`TreeMap` xác định trùng lặp bằng `compare == 0`, không dùng `equals`. Phép trừ `a - b` tràn số với giá trị lớn nên phải dùng `Integer.compare`."
+		}
+	},
+	{
+		"id": "java-core-012",
+		"topic": "java-core",
+		"difficulty": "hard",
+		"question": "Có những cách nào để tạo bản sao của object? Shallow copy khác deep copy thế nào?",
+		"answerShort": "Shallow copy chép field bề mặt — các reference vẫn dùng chung object con. Deep copy nhân bản cả cây object. Ưu tiên copy constructor hoặc static factory; `Cloneable`/`clone()` là API hỏng, nên tránh.",
+		"answerLong": "**Shallow copy**: object mới, nhưng mọi field kiểu reference vẫn trỏ tới cùng object cũ. Sửa `original.getAddress().setCity(...)` sẽ ảnh hưởng cả bản sao.\n\n**Deep copy**: nhân bản đệ quy toàn bộ đồ thị object. Phải xử lý cả tham chiếu vòng nếu có.\n\n**Các cách làm, xếp theo thứ tự nên dùng**:\n\n1. **Copy constructor / static factory** — `new Person(other)` hoặc `Person.copyOf(other)`. Rõ ràng, type-safe, hoạt động với `final` field, dùng được với subclass.\n2. **Record + `with`-style method** — tạo instance mới với một field thay đổi.\n3. **Serialization (Jackson, hoặc Java serialization)** — deep copy \"miễn phí\" nhưng chậm và yêu cầu toàn bộ cây phải serialize được. Java serialization còn có rủi ro bảo mật khi deserialize dữ liệu không tin cậy.\n4. **`Cloneable` + `clone()`** — nên tránh. Nó là interface đánh dấu không có method; `Object.clone()` là `protected` và `native`; nó bỏ qua constructor nên `final` field không gán được; mặc định chỉ là shallow copy. Chính Josh Bloch (tác giả *Effective Java*) khuyến nghị không dùng.\n\nCách chắc chắn nhất để khỏi phải copy: thiết kế object **immutable** ngay từ đầu — khi đó chia sẻ reference luôn an toàn.",
+		"code": "// Copy constructor có deep copy phần cần thiết\npublic Person(Person other) {\n    this.name = other.name;                       // String immutable -> chia sẻ an toàn\n    this.address = new Address(other.address);    // mutable -> phải nhân bản\n    this.tags = new ArrayList<>(other.tags);      // copy nông của list là đủ nếu phần tử immutable\n}",
+		"tags": ["clone", "deep-copy", "copy-constructor", "immutable"],
+		"quiz": {
+			"options": [
+				"`Object.clone()` mặc định thực hiện deep copy toàn bộ cây object",
+				"Shallow copy tạo object mới nhưng các field reference vẫn trỏ tới cùng object con",
+				"`Cloneable` là interface có sẵn method `clone()` để override",
+				"Copy constructor không dùng được với field `final`"
+			],
+			"correct": 1,
+			"explanation": "`Object.clone()` chỉ shallow copy. `Cloneable` là marker interface rỗng — không hề khai báo `clone()`. Copy constructor thì gán `final` field bình thường vì nó là constructor."
+		}
+	},
+	{
+		"id": "java-core-013",
+		"topic": "java-core",
+		"difficulty": "medium",
+		"question": "Composition và inheritance: vì sao lời khuyên thường là \"ưu tiên composition\"?",
+		"answerShort": "Inheritance khoá chặt class con vào chi tiết cài đặt của class cha — thay đổi ở cha âm thầm phá con. Composition ràng buộc qua interface hẹp, thay đổi được lúc runtime và không tiêu suất kế thừa duy nhất.",
+		"answerLong": "Inheritance là quan hệ **is-a** và là dạng coupling mạnh nhất trong OOP:\n\n- Class con phụ thuộc vào **cách cài đặt** của cha, không chỉ vào contract. Ví dụ kinh điển trong *Effective Java*: extend `HashSet` để đếm số phần tử đã thêm — override cả `add` và `addAll` sẽ đếm gấp đôi, vì `HashSet.addAll` gọi lại `add` bên trong. Chi tiết đó không nằm trong tài liệu và có thể đổi ở bản JDK sau.\n- Vi phạm đóng gói: `protected` field phơi ruột class cha ra.\n- Chỉ kế thừa được một class.\n- Cố định lúc biên dịch, không đổi được lúc chạy.\n\n**Composition** (quan hệ **has-a**): giữ object bên trong và uỷ nhiệm (delegate) lời gọi. Kết hợp với interface, ta có strategy pattern — hành vi thay được lúc runtime, test dễ vì mock được dependency, và không có ràng buộc ẩn nào.\n\n**Khi nào inheritance vẫn đúng**: quan hệ is-a thật sự và ổn định, class cha được thiết kế **có chủ đích** cho việc kế thừa (tài liệu hoá rõ method nào gọi method nào), hoặc trong cùng một package do một người kiểm soát. Nếu không định cho kế thừa thì đánh dấu class là `final` hoặc `sealed`.",
+		"code": "// Inheritance mong manh — đếm gấp đôi vì addAll gọi add\nclass CountingSet<E> extends HashSet<E> {\n    int count;\n    @Override public boolean add(E e) { count++; return super.add(e); }\n    @Override public boolean addAll(Collection<? extends E> c) { count += c.size(); return super.addAll(c); }\n}\n\n// Composition — không phụ thuộc vào cách HashSet cài đặt\nclass CountingSet<E> implements Set<E> {\n    private final Set<E> delegate = new HashSet<>();\n    int count;\n    @Override public boolean add(E e) { count++; return delegate.add(e); }\n    // ... uỷ nhiệm các method còn lại\n}",
+		"tags": ["composition", "inheritance", "coupling", "design"],
+		"quiz": {
+			"options": [
+				"Composition luôn cho hiệu năng cao hơn inheritance",
+				"Inheritance khiến class con phụ thuộc vào chi tiết cài đặt của class cha, dễ vỡ khi cha thay đổi",
+				"Composition không cho phép tái sử dụng code",
+				"Class con luôn nhìn thấy được mọi `private` field của class cha"
+			],
+			"correct": 1,
+			"explanation": "Vấn đề cốt lõi là fragile base class: hành vi nội bộ của cha (method này gọi method kia) không nằm trong contract nhưng con lại phụ thuộc vào nó. `private` field của cha thì con không truy cập được."
+		}
+	},
+	{
+		"id": "java-core-014",
+		"topic": "java-core",
+		"difficulty": "easy",
+		"question": "`String`, `StringBuilder` và `StringBuffer` khác nhau chỗ nào? Khi nào dùng cái nào?",
+		"answerShort": "`String` immutable. `StringBuilder` mutable, **không** đồng bộ, nhanh — mặc định nên dùng. `StringBuffer` mutable, đồng bộ bằng `synchronized`, chỉ cần khi nhiều thread cùng ghi vào một buffer (rất hiếm).",
+		"answerLong": "| | `String` | `StringBuilder` | `StringBuffer` |\n|---|---|---|---|\n| Thay đổi được | không | có | có |\n| Thread-safe | có (do immutable) | không | có (`synchronized`) |\n| Tốc độ | chậm khi nối nhiều | nhanh nhất | chậm hơn ~10–20% |\n| Có từ | 1.0 | 5.0 | 1.0 |\n\n**Quy tắc thực dụng**:\n\n- Chuỗi ngắn, cố định, hoặc nối trong **một** biểu thức → `String` bình thường. Compiler tự tối ưu `a + b + c` (từ Java 9 dùng `invokedynamic` + `StringConcatFactory`, hiệu quả hơn `StringBuilder` thủ công).\n- Nối trong **vòng lặp** hoặc xây chuỗi nhiều bước → `StringBuilder`. Đặt sẵn capacity nếu ước lượng được độ dài: `new StringBuilder(1024)`.\n- `StringBuffer` gần như không còn lý do dùng: một buffer được chia sẻ giữa các thread thường là dấu hiệu thiết kế sai — đưa mỗi thread một `StringBuilder` riêng vẫn đúng và nhanh hơn. Hơn nữa `synchronized` từng method **không** làm cả chuỗi thao tác trở nên atomic.\n\nCác lựa chọn hiện đại khác: `String.join()`, `Collectors.joining()`, `String.format()`/`formatted()`, và text block `\"\"\"...\"\"\"` cho chuỗi nhiều dòng.",
+		"code": "// Trong vòng lặp: StringBuilder\nStringBuilder sb = new StringBuilder(256);\nfor (var row : rows) sb.append(row.id()).append(',');\n\n// Ghép danh sách: rõ ràng hơn hẳn vòng lặp thủ công\nString csv = rows.stream().map(Row::id).collect(Collectors.joining(\",\"));\nString path = String.join(\"/\", \"api\", \"v1\", \"users\");",
+		"tags": ["string", "stringbuilder", "stringbuffer", "performance"],
+		"quiz": {
+			"options": [
+				"`StringBuffer` nhanh hơn `StringBuilder` vì được tối ưu bằng `synchronized`",
+				"`StringBuilder` thread-safe nên dùng được chung giữa nhiều thread",
+				"`StringBuilder` không đồng bộ nên nhanh hơn và là lựa chọn mặc định trong code đơn luồng",
+				"Nối chuỗi bằng `+` trong vòng lặp có cùng độ phức tạp với `StringBuilder.append`"
+			],
+			"correct": 2,
+			"explanation": "`synchronized` là chi phí thêm chứ không phải tối ưu. Nối bằng `+` trong vòng lặp tạo object mới mỗi vòng nên là O(n²)."
+		}
+	}
+]

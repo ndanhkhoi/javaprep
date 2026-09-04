@@ -1,0 +1,222 @@
+[
+	{
+		"id": "concurrency-001",
+		"topic": "concurrency",
+		"difficulty": "medium",
+		"question": "`volatile` giải quyết vấn đề gì? Vì sao nó không đủ để đảm bảo an toàn thread?",
+		"answerShort": "`volatile` đảm bảo **visibility** (thread khác thấy giá trị mới nhất) và cấm sắp xếp lại lệnh quanh biến đó. Nó **không** đảm bảo **atomicity** — `count++` vẫn là ba thao tác đọc-sửa-ghi nên vẫn mất cập nhật.",
+		"answerLong": "Java Memory Model cho phép mỗi thread cache giá trị biến trong thanh ghi hoặc CPU cache, và cho phép JIT/CPU sắp xếp lại lệnh miễn kết quả đơn luồng không đổi. Hai điều đó gây ra hai lớp bug khác nhau.\n\n**`volatile` giải quyết**:\n\n1. **Visibility** — ghi vào biến `volatile` được đẩy ngay ra bộ nhớ chính, đọc luôn lấy từ bộ nhớ chính. Không có `volatile`, vòng lặp `while (!stopped) {}` có thể chạy mãi mãi vì JIT nâng biến ra ngoài vòng lặp.\n2. **Ordering** — tạo quan hệ *happens-before*: mọi thao tác ghi **trước** một lệnh ghi `volatile` đều thấy được với thread nào đọc biến `volatile` đó sau này. Đây là điều làm cho double-checked locking hoạt động đúng.\n\n**`volatile` KHÔNG giải quyết**: atomicity của thao tác kép. `count++` biên dịch thành đọc → cộng → ghi; hai thread có thể xen kẽ và mất một lần tăng.\n\n**Khi nào `volatile` là đủ**: biến cờ chỉ được ghi bởi một thread, hoặc mọi lần ghi đều không phụ thuộc vào giá trị hiện tại.\n\n**Khi nào cần hơn**: đếm hoặc cập nhật phụ thuộc giá trị cũ → `AtomicInteger`/`LongAdder`; cần bảo vệ nhiều biến liên quan → `synchronized` hoặc `ReentrantLock`.",
+		"code": "// volatile là đủ: cờ dừng, chỉ ghi giá trị độc lập\nprivate volatile boolean running = true;\npublic void stop() { running = false; }\n\n// volatile KHÔNG đủ: đọc-sửa-ghi\nprivate volatile int count;\npublic void inc() { count++; }        // vẫn mất cập nhật\n\n// Đúng\nprivate final AtomicInteger count = new AtomicInteger();\npublic void inc() { count.incrementAndGet(); }",
+		"tags": ["volatile", "visibility", "atomicity", "jmm"],
+		"quiz": {
+			"options": [
+				"`volatile` đảm bảo visibility và thứ tự, nhưng không làm cho `count++` trở nên atomic",
+				"`volatile` làm cho mọi thao tác trên biến trở thành atomic",
+				"`volatile` chỉ có tác dụng với kiểu `boolean`",
+				"`volatile` thay thế hoàn toàn được `synchronized`"
+			],
+			"correct": 0,
+			"explanation": "`count++` là ba lệnh riêng biệt. `volatile` chỉ bảo đảm mỗi lần đọc/ghi thấy giá trị mới nhất, không khoá được cả chuỗi."
+		}
+	},
+	{
+		"id": "concurrency-002",
+		"topic": "concurrency",
+		"difficulty": "easy",
+		"question": "`synchronized` hoạt động thế nào? Khoá trên method và khoá trên block khác gì nhau?",
+		"answerShort": "`synchronized` lấy monitor lock của một object. Method instance khoá trên `this`, method `static` khoá trên `Class` object, block khoá trên object bạn chỉ định. Khoá là reentrant và tự nhả khi ném exception.",
+		"answerLong": "Mỗi object trong Java có một **monitor**. `synchronized` biên dịch thành `monitorenter`/`monitorexit` trong bytecode (với method thì là cờ `ACC_SYNCHRONIZED`).\n\n**Khoá trên cái gì**:\n\n- `synchronized void m()` → khoá `this`.\n- `static synchronized void m()` → khoá `MyClass.class`. Đây là khoá **khác** với `this` — hai method này chạy song song được, một sai lầm phổ biến.\n- `synchronized (obj) { ... }` → khoá `obj`.\n\n**Tính chất**:\n\n- **Reentrant**: thread đang giữ khoá gọi tiếp method `synchronized` khác trên cùng object thì không tự deadlock. JVM đếm số lần vào.\n- **Tự nhả**: khoá được nhả khi ra khỏi block, kể cả khi ném exception. Đây là ưu điểm lớn so với `Lock` thủ công (phải `unlock()` trong `finally`).\n- Ngoài loại trừ lẫn nhau, nó còn tạo **happens-before**: mọi thay đổi trước khi nhả khoá đều thấy được với thread lấy khoá sau đó.\n\n**Thực hành tốt**: khoá trên một field `private final Object lock = new Object()` thay vì `this`. Khoá `this` phơi monitor ra ngoài — code bên ngoài có thể `synchronized (yourObject)` và làm treo class của bạn. Không bao giờ khoá trên `String` literal hay object wrapper: chúng được intern/cache nên vô tình chia sẻ chung khoá toàn cục.\n\n**Hiệu năng**: JVM hiện đại có biased locking (đã gỡ ở JDK 15+), thin lock và adaptive spinning, nên `synchronized` không khoá tranh chấp gần như miễn phí. Không tối ưu sớm bằng cách né nó.",
+		"code": "public class Counter {\n    private final Object lock = new Object();  // khoá riêng, không phơi ra ngoài\n    private int value;\n\n    public void inc() {\n        synchronized (lock) { value++; }\n    }\n}\n\n// Bẫy: hai method này KHÔNG loại trừ lẫn nhau\nsynchronized void a() {}          // khoá this\nstatic synchronized void b() {}   // khoá MyClass.class",
+		"tags": ["synchronized", "monitor", "lock", "reentrant"],
+		"quiz": {
+			"options": [
+				"`synchronized` method instance và `static synchronized` method dùng chung một khoá",
+				"Khoá `synchronized` không tự nhả khi method ném exception",
+				"`synchronized` là reentrant: thread đang giữ khoá gọi tiếp method đồng bộ khác trên cùng object không bị deadlock",
+				"Khoá trên `String` literal là cách hay để chia sẻ khoá giữa các class"
+			],
+			"correct": 2,
+			"explanation": "Method instance khoá `this`, `static` khoá `Class` object — hai khoá khác nhau. Khoá luôn nhả khi thoát block kể cả do exception. `String` literal bị intern nên khoá lên nó là khoá toàn cục ngoài ý muốn."
+		}
+	},
+	{
+		"id": "concurrency-003",
+		"topic": "concurrency",
+		"difficulty": "medium",
+		"question": "Deadlock là gì? Bốn điều kiện Coffman và cách phòng tránh trong thực tế?",
+		"answerShort": "Deadlock là khi các thread chờ khoá lẫn nhau thành vòng tròn nên không thread nào tiến được. Cách phòng thực tế nhất là **luôn lấy khoá theo một thứ tự toàn cục cố định**, và dùng `tryLock` có timeout.",
+		"answerLong": "**Bốn điều kiện Coffman** — deadlock chỉ xảy ra khi cả bốn cùng đúng:\n\n1. **Mutual exclusion** — tài nguyên chỉ một thread giữ được.\n2. **Hold and wait** — giữ khoá này trong khi chờ khoá khác.\n3. **No preemption** — không cướp khoá của thread khác được.\n4. **Circular wait** — tồn tại vòng chờ A→B→A.\n\nPhá bất kỳ điều kiện nào là hết deadlock. Trong Java điều kiện 4 dễ phá nhất.\n\n**Cách phòng, xếp theo tính thực dụng**:\n\n1. **Thứ tự khoá toàn cục** — quy ước mọi nơi lấy khoá theo cùng một thứ tự (ví dụ theo `System.identityHashCode` hoặc theo id nghiệp vụ). Đây là cách hiệu quả nhất cho bài toán chuyển tiền giữa hai tài khoản.\n2. **`tryLock(timeout)`** của `ReentrantLock` — không lấy được thì nhả hết khoá đang giữ, chờ ngẫu nhiên rồi thử lại. Phá điều kiện 2 và 3.\n3. **Thu hẹp phạm vi khoá** — không gọi method của class khác (\"alien method\") khi đang giữ khoá; đó là nguồn deadlock ẩn khó thấy nhất.\n4. **Dùng cấu trúc dữ liệu đồng thời sẵn có** thay vì tự khoá.\n\n**Phân biệt**: *livelock* là các thread liên tục phản ứng lẫn nhau mà không tiến triển; *starvation* là một thread mãi không được cấp tài nguyên do độ ưu tiên.\n\n**Chẩn đoán**: `jstack <pid>` phát hiện và in thẳng ra \"Found one Java-level deadlock\" kèm chu trình khoá. `ThreadMXBean.findDeadlockedThreads()` làm được điều tương tự trong code.",
+		"code": "// Deadlock: hai thread lấy khoá theo thứ tự ngược nhau\nvoid transfer(Account from, Account to, BigDecimal amt) {\n    synchronized (from) { synchronized (to) { /* ... */ } }\n}\n\n// Phòng tránh: áp thứ tự toàn cục theo id\nvoid transfer(Account from, Account to, BigDecimal amt) {\n    Account first  = from.id() < to.id() ? from : to;\n    Account second = first == from ? to : from;\n    synchronized (first) { synchronized (second) { /* ... */ } }\n}",
+		"tags": ["deadlock", "lock-ordering", "trylock", "jstack"],
+		"quiz": {
+			"options": [
+				"Deadlock chỉ xảy ra khi dùng `synchronized`, không xảy ra với `ReentrantLock`",
+				"Áp một thứ tự lấy khoá toàn cục cố định sẽ phá điều kiện circular wait và ngăn được deadlock",
+				"Tăng số lượng thread là cách khắc phục deadlock",
+				"JVM tự động phát hiện và giải phóng deadlock lúc runtime"
+			],
+			"correct": 1,
+			"explanation": "Không có vòng chờ thì không có deadlock. JVM chỉ **phát hiện** được qua `jstack`/`ThreadMXBean`, không tự giải phóng."
+		}
+	},
+	{
+		"id": "concurrency-004",
+		"topic": "concurrency",
+		"difficulty": "medium",
+		"question": "`ExecutorService` và `ThreadPoolExecutor` hoạt động ra sao? Vì sao không nên dùng `Executors.newFixedThreadPool` trong hệ thống thật?",
+		"answerShort": "`ThreadPoolExecutor` nhận task vào hàng đợi và giao cho pool thread. `newFixedThreadPool` dùng `LinkedBlockingQueue` **không chặn kích thước** — task dồn lại vô hạn cho tới khi `OutOfMemoryError`, mất hoàn toàn backpressure.",
+		"answerLong": "**Quy tắc điều phối của `ThreadPoolExecutor`** (đúng theo thứ tự này, và hay bị hiểu sai):\n\n1. Số thread < `corePoolSize` → tạo thread mới, **kể cả khi có thread đang rảnh**.\n2. Đã đủ core → đẩy task vào `workQueue`.\n3. Hàng đợi **đầy** → tạo thêm thread tới `maximumPoolSize`.\n4. Cả hàng đợi lẫn pool đều đầy → gọi `RejectedExecutionHandler`.\n\nHệ quả then chốt: nếu hàng đợi không có giới hạn thì bước 3 **không bao giờ xảy ra** — `maximumPoolSize` trở thành vô nghĩa.\n\n**Vì sao tránh factory của `Executors`**:\n\n- `newFixedThreadPool(n)` / `newSingleThreadExecutor()` → `LinkedBlockingQueue` với sức chứa `Integer.MAX_VALUE`. Task chất đống → OOM.\n- `newCachedThreadPool()` → `SynchronousQueue` + `maximumPoolSize = Integer.MAX_VALUE`. Tải cao sinh ra vô số thread → OOM kiểu khác.\n\nKhuyến nghị này nằm trong Google Java Style Guide và Alibaba Java Guidelines: hãy tự tạo `ThreadPoolExecutor` với hàng đợi **có chặn** và chính sách từ chối rõ ràng.\n\n**Bốn chính sách từ chối**: `AbortPolicy` (mặc định, ném `RejectedExecutionException`), `CallerRunsPolicy` (thread gọi tự chạy — tạo backpressure tự nhiên, thường là lựa chọn tốt nhất cho web service), `DiscardPolicy`, `DiscardOldestPolicy`.\n\n**Đặt kích thước**: tác vụ CPU-bound → khoảng số nhân + 1. Tác vụ I/O-bound → `nhân × (1 + thời gian chờ / thời gian tính)`. Từ Java 21, tác vụ I/O-bound nên cân nhắc **virtual thread** thay vì pool lớn.\n\nLuôn **shutdown**: `shutdown()` rồi `awaitTermination()`, cuối cùng `shutdownNow()` nếu quá hạn.",
+		"code": "ThreadPoolExecutor pool = new ThreadPoolExecutor(\n    8, 32,                                   // core, max\n    60L, TimeUnit.SECONDS,                   // thời gian sống của thread dư\n    new ArrayBlockingQueue<>(1000),          // CÓ chặn -> có backpressure\n    new ThreadFactoryBuilder().setNameFormat(\"worker-%d\").build(),\n    new ThreadPoolExecutor.CallerRunsPolicy()\n);\n\n// Java 21: tác vụ I/O-bound\ntry (var executor = Executors.newVirtualThreadPerTaskExecutor()) {\n    tasks.forEach(executor::submit);\n}",
+		"tags": ["executor", "thread-pool", "backpressure", "rejection-policy"],
+		"quiz": {
+			"options": [
+				"`newFixedThreadPool` dùng hàng đợi không giới hạn nên task dồn lại có thể gây `OutOfMemoryError`",
+				"`ThreadPoolExecutor` tạo thêm thread ngay khi hàng đợi có task, trước khi hàng đợi đầy",
+				"`maximumPoolSize` luôn có tác dụng bất kể loại hàng đợi được dùng",
+				"`AbortPolicy` khiến thread gọi tự thực thi task bị từ chối"
+			],
+			"correct": 0,
+			"explanation": "Thread chỉ vượt quá `corePoolSize` **sau khi** hàng đợi đầy, nên hàng đợi vô hạn khiến `maximumPoolSize` vô nghĩa. `CallerRunsPolicy` mới là chính sách để thread gọi tự chạy."
+		}
+	},
+	{
+		"id": "concurrency-005",
+		"topic": "concurrency",
+		"difficulty": "hard",
+		"question": "Virtual thread trong Java 21 là gì? Nó thay đổi cách viết code đồng thời như thế nào?",
+		"answerShort": "Virtual thread là thread nhẹ do JVM lập lịch, không gắn 1-1 với thread hệ điều hành. Thread bị chặn ở I/O sẽ **unmount** khỏi carrier thread, cho phép hàng triệu thread đồng thời với mô hình lập trình đồng bộ quen thuộc.",
+		"answerLong": "**Vấn đề nó giải quyết**: platform thread ánh xạ 1-1 với thread OS, tốn ~1MB stack và chuyển ngữ cảnh đắt. Vì thế ta phải dùng pool nhỏ, và để tận dụng CPU thì phải viết code bất đồng bộ (`CompletableFuture`, reactive) — đánh đổi bằng stack trace vô nghĩa, debug khó và code khó đọc.\n\n**Cách hoạt động** (JEP 444, chính thức từ Java 21): virtual thread chạy trên một *carrier* là platform thread lấy từ `ForkJoinPool`. Khi virtual thread chặn ở một thao tác được JDK trang bị lại (socket, file NIO, `Thread.sleep`, `synchronized` từ JDK 24, `ReentrantLock`), stack của nó được **copy lên heap** và carrier thread được trả lại để chạy virtual thread khác. Khi thao tác xong, stack được mount lại.\n\n**Hệ quả về cách viết code**:\n\n- Trở lại phong cách **thread-per-request** đồng bộ, dễ đọc và có stack trace đầy đủ.\n- **Không pool virtual thread** — chúng rẻ, tạo mới cho mỗi task. Pool tồn tại để tái sử dụng tài nguyên đắt; virtual thread không đắt.\n- `ThreadLocal` vẫn dùng được nhưng tốn bộ nhớ khi có hàng triệu thread. Thay bằng `ScopedValue` (JEP 446).\n- **Pinning**: trước JDK 24, block `synchronized` giữ chặt virtual thread vào carrier — hiệu năng sụp khi bị chặn bên trong. Cách khắc phục là đổi sang `ReentrantLock`. JDK 24 (JEP 491) đã xử lý phần lớn vấn đề này.\n- Virtual thread **không** làm tác vụ CPU-bound nhanh hơn — số nhân vẫn là giới hạn.\n\n**Structured concurrency** (`StructuredTaskScope`) đi kèm: buộc các task con kết thúc trong phạm vi task cha, huỷ lan truyền tự động.",
+		"code": "// Mỗi request một virtual thread — không pool\ntry (var scope = Executors.newVirtualThreadPerTaskExecutor()) {\n    for (var req : requests) scope.submit(() -> handle(req)); // chặn ở I/O là bình thường\n}\n\n// Structured concurrency: fork-join có phạm vi rõ ràng\ntry (var scope = new StructuredTaskScope.ShutdownOnFailure()) {\n    var user  = scope.fork(() -> fetchUser(id));\n    var order = scope.fork(() -> fetchOrders(id));\n    scope.join().throwIfFailed();\n    return new Page(user.get(), order.get());\n}",
+		"tags": ["virtual-thread", "loom", "java21", "structured-concurrency"],
+		"quiz": {
+			"options": [
+				"Virtual thread nên được gom vào pool để tái sử dụng như platform thread",
+				"Virtual thread làm tác vụ tính toán CPU-bound chạy nhanh hơn đáng kể",
+				"Virtual thread unmount khỏi carrier thread khi bị chặn ở I/O, nên thread-per-request trở lại khả thi",
+				"Virtual thread yêu cầu viết lại toàn bộ code sang phong cách bất đồng bộ"
+			],
+			"correct": 2,
+			"explanation": "Ý nghĩa lớn nhất là được viết code đồng bộ dễ đọc mà vẫn scale. Pool virtual thread là phản mẫu vì chúng vốn đã rẻ; CPU-bound thì vẫn bị giới hạn bởi số nhân."
+		}
+	},
+	{
+		"id": "concurrency-006",
+		"topic": "concurrency",
+		"difficulty": "medium",
+		"question": "`CompletableFuture` khác `Future` thế nào? Các cách kết hợp thường dùng?",
+		"answerShort": "`Future` chỉ có `get()` chặn thread và không kết hợp được. `CompletableFuture` cho phép nối chuỗi không chặn (`thenApply`, `thenCompose`), kết hợp nhiều future (`allOf`, `thenCombine`) và xử lý lỗi (`exceptionally`, `handle`).",
+		"answerLong": "**Hạn chế của `Future`** (Java 5): chỉ `get()` (chặn), `isDone()` (phải poll), `cancel()`. Không có callback, không nối chuỗi, không kết hợp, không xử lý lỗi ngoài việc bắt `ExecutionException`.\n\n**`CompletableFuture`** (Java 8) implement `Future` và `CompletionStage`, cung cấp ~50 method chia thành nhóm:\n\n- **Biến đổi**: `thenApply(fn)` — như `map`. `thenCompose(fn)` — như `flatMap`, dùng khi hàm trả về chính một `CompletableFuture` (không có nó sẽ thành `CF<CF<T>>`).\n- **Kết hợp**: `thenCombine(other, fn)` — chờ cả hai. `allOf(...)` — chờ tất cả (trả `CF<Void>`, phải tự `join()` từng cái để lấy giá trị). `anyOf(...)` — cái nào xong trước.\n- **Xử lý lỗi**: `exceptionally(fn)` — chỉ chạy khi lỗi. `handle(fn)` — chạy cả hai trường hợp. `whenComplete` — như `finally`, không đổi kết quả.\n\n**Ba cái bẫy hay gặp**:\n\n1. Hậu tố `Async` quyết định thread nào chạy. Không có `Async` thì callback chạy trên thread hoàn thành future trước đó — có thể là thread I/O, không nên làm việc nặng ở đó.\n2. Executor mặc định là `ForkJoinPool.commonPool()`, dùng chung toàn JVM và có kích thước bằng số nhân − 1. Task chặn I/O trong đó sẽ làm đói mọi thứ khác. **Luôn truyền executor riêng.**\n3. `join()` ném unchecked `CompletionException`, còn `get()` ném checked `ExecutionException` — chọn cái phù hợp với ngữ cảnh.\n\nTừ Java 21, phần lớn các trường hợp dùng `CompletableFuture` thuần tuý để tránh chặn thread có thể viết lại đơn giản hơn bằng virtual thread.",
+		"code": "Executor io = Executors.newFixedThreadPool(16);\n\nCompletableFuture<User>   u = CompletableFuture.supplyAsync(() -> fetchUser(id), io);\nCompletableFuture<Profile> p = u.thenComposeAsync(user -> fetchProfile(user), io); // flatMap\n\np.thenCombine(fetchSettingsAsync(id), Page::new)\n .orTimeout(2, TimeUnit.SECONDS)\n .exceptionally(ex -> Page.fallback())\n .thenAcceptAsync(this::render, io);",
+		"tags": ["completablefuture", "async", "composition", "forkjoinpool"],
+		"quiz": {
+			"options": [
+				"`thenApply` là lựa chọn đúng khi hàm biến đổi trả về một `CompletableFuture` khác",
+				"Executor mặc định của `CompletableFuture` là `ForkJoinPool.commonPool()`, dùng chung toàn JVM",
+				"`Future` của Java 5 hỗ trợ đăng ký callback khi hoàn thành",
+				"`exceptionally()` chạy cả khi future hoàn thành thành công"
+			],
+			"correct": 1,
+			"explanation": "`commonPool` dùng chung nên task chặn I/O trong đó làm đói cả JVM — luôn truyền executor riêng. Hàm trả về future phải dùng `thenCompose`, còn `exceptionally` chỉ chạy khi có lỗi."
+		}
+	},
+	{
+		"id": "concurrency-007",
+		"topic": "concurrency",
+		"difficulty": "medium",
+		"question": "`ThreadLocal` dùng để làm gì? Vì sao nó có thể gây rò rỉ bộ nhớ?",
+		"answerShort": "`ThreadLocal` cho mỗi thread một bản giá trị riêng — hay dùng cho `SecurityContext`, transaction, `SimpleDateFormat`. Rò rỉ xảy ra trong thread pool: thread sống mãi nên value không bao giờ được thu hồi nếu không gọi `remove()`.",
+		"answerLong": "**Cơ chế**: mỗi `Thread` có một field `ThreadLocal.ThreadLocalMap threadLocals`. Key là `WeakReference<ThreadLocal<?>>`, value là **strong reference**. `get()` tra map của thread hiện tại.\n\n**Vì sao rò rỉ**: khi object `ThreadLocal` không còn được tham chiếu, key yếu bị GC thu → entry thành `(null, value)`. Nhưng **value vẫn là strong reference** và map thì sống chung tuổi thọ với thread. Trong thread pool, thread được tái sử dụng vô thời hạn → value bị giữ lại mãi mãi. Nếu value là một object nặng (hoặc giữ cả `ClassLoader` của ứng dụng), đây trở thành rò rỉ nghiêm trọng — trong web container nó ngăn cả webapp được unload sau khi redeploy.\n\n`ThreadLocalMap` có dọn dẹp cơ hội (`expungeStaleEntries`) khi có va chạm hash, nhưng đó chỉ là best-effort, không thay được `remove()`.\n\n**Quy tắc**: luôn `remove()` trong `finally`. Trong web framework, đây là việc của filter/interceptor bao ngoài request.\n\n**Với virtual thread**: mỗi thread có map riêng, một triệu thread là một triệu map. Java 21+ khuyên dùng `ScopedValue` (JEP 446) — bất biến, có phạm vi rõ ràng, kế thừa được sang task con, và tự dọn khi ra khỏi phạm vi.\n\n**Lưu ý về `InheritableThreadLocal`**: giá trị được truyền sang thread con lúc tạo — trong thread pool điều này gần như luôn sai, vì thread được tạo một lần rồi tái dùng cho vô số request khác nhau.",
+		"code": "private static final ThreadLocal<SimpleDateFormat> FMT =\n    ThreadLocal.withInitial(() -> new SimpleDateFormat(\"yyyy-MM-dd\"));\n\ntry {\n    return FMT.get().format(date);\n} finally {\n    FMT.remove();   // BẮT BUỘC trong thread pool\n}\n\n// Java 21+: không rò rỉ, phạm vi rõ ràng\nprivate static final ScopedValue<User> CURRENT = ScopedValue.newInstance();\nScopedValue.where(CURRENT, user).run(() -> handle(request));",
+		"tags": ["threadlocal", "memory-leak", "scopedvalue", "thread-pool"],
+		"quiz": {
+			"options": [
+				"`ThreadLocalMap` giữ value bằng weak reference nên GC luôn tự thu hồi được",
+				"Trong thread pool, không gọi `remove()` khiến value bị giữ lại suốt vòng đời của thread",
+				"`ThreadLocal` tự động xoá giá trị khi task kết thúc",
+				"`InheritableThreadLocal` là lựa chọn đúng khi làm việc với thread pool"
+			],
+			"correct": 1,
+			"explanation": "Key là weak reference nhưng **value là strong**. Thread pool giữ thread sống mãi nên value không bao giờ được giải phóng nếu không `remove()`."
+		}
+	},
+	{
+		"id": "concurrency-008",
+		"topic": "concurrency",
+		"difficulty": "medium",
+		"question": "`ReentrantLock` cung cấp thêm gì so với `synchronized`?",
+		"answerShort": "`tryLock()` có timeout, `lockInterruptibly()`, khoá công bằng (fair), nhiều `Condition` trên cùng một khoá, và lấy/nhả khoá ở hai phạm vi khác nhau. Đổi lại phải tự `unlock()` trong `finally`.",
+		"answerLong": "| | `synchronized` | `ReentrantLock` |\n|---|---|---|\n| Nhả khoá | tự động | thủ công trong `finally` |\n| `tryLock` có timeout | không | có |\n| Ngắt được khi đang chờ | không | `lockInterruptibly()` |\n| Fairness | không | tuỳ chọn |\n| Số condition queue | 1 (`wait`/`notify`) | nhiều (`newCondition()`) |\n| Kiểm tra trạng thái | không | `isLocked`, `getHoldCount`, `getQueueLength` |\n\n**Khi nào cần `ReentrantLock`**:\n\n- Cần **timeout** để tránh deadlock hoặc để fail fast.\n- Cần **huỷ** thread đang chờ khoá.\n- Cần **nhiều điều kiện chờ** — ví dụ bounded buffer cần `notFull` và `notEmpty` riêng biệt. Với `synchronized` chỉ có một hàng đợi nên `notifyAll()` đánh thức cả những thread không liên quan.\n- Cần lấy khoá ở method này và nhả ở method khác (hiếm và dễ sai).\n\n**Fairness**: `new ReentrantLock(true)` cho thread chờ lâu nhất được ưu tiên, chống starvation nhưng throughput giảm mạnh (thường vài lần) vì mất khả năng barging. Mặc định `false` là đúng cho hầu hết trường hợp.\n\n**Anh em cùng họ** (đều dựa trên `AbstractQueuedSynchronizer`): `ReentrantReadWriteLock` (nhiều reader song song, một writer), `StampedLock` (Java 8, có chế độ optimistic read rất nhanh nhưng **không** reentrant và dễ dùng sai), `Semaphore`, `CountDownLatch`, `CyclicBarrier`.\n\n**Mặc định nên chọn**: `synchronized` — ngắn gọn, không quên nhả khoá, JVM tối ưu tốt. Chỉ đổi sang `ReentrantLock` khi cần một tính năng cụ thể ở trên.",
+		"code": "private final ReentrantLock lock = new ReentrantLock();\nprivate final Condition notEmpty = lock.newCondition();\nprivate final Condition notFull  = lock.newCondition();\n\npublic void put(T item) throws InterruptedException {\n    lock.lock();\n    try {\n        while (isFull()) notFull.await();\n        enqueue(item);\n        notEmpty.signal();      // chỉ đánh thức consumer, không đánh thức producer\n    } finally {\n        lock.unlock();          // BẮT BUỘC trong finally\n    }\n}",
+		"tags": ["reentrantlock", "condition", "fairness", "aqs"],
+		"quiz": {
+			"options": [
+				"`ReentrantLock` tự động nhả khoá khi ra khỏi block giống `synchronized`",
+				"`ReentrantLock` công bằng (fair) cho throughput cao hơn chế độ mặc định",
+				"`ReentrantLock` hỗ trợ nhiều `Condition` riêng biệt trên cùng một khoá, còn `synchronized` chỉ có một hàng đợi chờ",
+				"`synchronized` hỗ trợ `tryLock` với timeout từ Java 8"
+			],
+			"correct": 2,
+			"explanation": "Nhiều `Condition` là khác biệt hữu ích nhất — bounded buffer tách được `notFull`/`notEmpty`. Chế độ fair làm giảm throughput, và `ReentrantLock` phải `unlock()` thủ công."
+		}
+	},
+	{
+		"id": "concurrency-009",
+		"topic": "concurrency",
+		"difficulty": "hard",
+		"question": "Happens-before trong Java Memory Model nghĩa là gì? Kể các quan hệ chính.",
+		"answerShort": "Happens-before là quan hệ đảm bảo: nếu A happens-before B thì mọi thay đổi bộ nhớ của A đều **thấy được** ở B. Không có quan hệ này giữa hai thread thì JVM được phép để chúng thấy dữ liệu cũ hoặc lệch thứ tự.",
+		"answerLong": "JMM (đặc tả từ JSR-133, Java 5) không mô tả \"khi nào giá trị được ghi ra bộ nhớ chính\" mà mô tả **thread nào bắt buộc thấy được thay đổi của thread nào**. Đó là ngôn ngữ duy nhất để lập luận đúng về code đồng thời.\n\n**Các quan hệ happens-before chính**:\n\n1. **Program order** — trong cùng một thread, lệnh trước happens-before lệnh sau (về mặt quan sát được; JIT vẫn được sắp xếp lại nếu không đổi kết quả).\n2. **Monitor lock** — nhả khoá happens-before mọi lần lấy **cùng khoá** đó sau này.\n3. **Volatile** — ghi biến `volatile` happens-before mọi lần đọc biến đó sau này.\n4. **Thread start** — mọi thứ trước `t.start()` happens-before mọi thứ trong thread `t`.\n5. **Thread join** — mọi thứ trong `t` happens-before khi `t.join()` trả về.\n6. **Final field** — field `final` được gán trong constructor thấy được ở mọi thread sau khi object được publish an toàn.\n7. **Bắc cầu** — A hb B và B hb C thì A hb C.\n\nMọi tiện ích trong `java.util.concurrent` đều được xây trên các quan hệ này: đưa object vào `BlockingQueue` happens-before khi lấy ra; `countDown()` happens-before `await()` trả về; submit task happens-before task chạy.\n\n**Vì sao quan trọng thực tế**: bug \"unsafe publication\" — object được tạo, tham chiếu bị gán cho một field không `volatile` và thread khác đọc thấy tham chiếu **nhưng đọc phải constructor chưa chạy xong**. Đây chính xác là lý do double-checked locking cần `volatile`; thiếu nó code chạy đúng 99.99% số lần rồi hỏng ngẫu nhiên trên máy production.",
+		"code": "// Double-checked locking — volatile là BẮT BUỘC\nprivate volatile Config instance;\n\npublic Config get() {\n    Config local = instance;\n    if (local == null) {\n        synchronized (this) {\n            local = instance;\n            if (local == null) instance = local = new Config();\n        }\n    }\n    return local;\n}\n\n// Đơn giản và an toàn hơn: holder idiom, JVM đảm bảo class init chỉ chạy một lần\nprivate static class Holder { static final Config INSTANCE = new Config(); }\npublic static Config get() { return Holder.INSTANCE; }",
+		"tags": ["jmm", "happens-before", "memory-model", "safe-publication"],
+		"quiz": {
+			"options": [
+				"Happens-before đảm bảo A chạy trước B về mặt thời gian thực tế",
+				"Nếu A happens-before B thì mọi thay đổi bộ nhớ của A đều thấy được ở B",
+				"Double-checked locking hoạt động đúng ngay cả khi biến không phải `volatile`",
+				"Chỉ `synchronized` mới tạo được quan hệ happens-before"
+			],
+			"correct": 1,
+			"explanation": "Happens-before nói về **visibility và thứ tự quan sát được**, không phải thời điểm thực thi. `volatile`, `Thread.start/join`, `final` field và các lớp trong `java.util.concurrent` đều tạo ra quan hệ này."
+		}
+	},
+	{
+		"id": "concurrency-010",
+		"topic": "concurrency",
+		"difficulty": "easy",
+		"question": "`wait()`/`notify()` và `sleep()` khác nhau thế nào? Vì sao `wait()` phải nằm trong vòng `while`?",
+		"answerShort": "`sleep()` giữ nguyên khoá và chỉ dừng theo thời gian. `wait()` **nhả khoá** và chờ `notify()`. Phải bọc trong `while` vì có spurious wakeup và vì điều kiện có thể đã bị thread khác thay đổi trước khi bạn giành lại được khoá.",
+		"answerLong": "| | `Thread.sleep(ms)` | `Object.wait()` |\n|---|---|---|\n| Thuộc về | `Thread` (static) | `Object` |\n| Nhả khoá | **không** | **có** |\n| Đánh thức bởi | hết thời gian, `interrupt()` | `notify`/`notifyAll`, timeout, `interrupt()` |\n| Yêu cầu | không | phải đang giữ monitor của object đó |\n\nGọi `wait()` mà không giữ khoá ném `IllegalMonitorStateException`.\n\n**Vì sao `while` chứ không `if`** — ba lý do độc lập, mỗi lý do đã đủ:\n\n1. **Spurious wakeup**: đặc tả cho phép thread thức dậy mà không có ai `notify` (do cách cài đặt trên một số OS).\n2. **`notifyAll` đánh thức tất cả**: nhiều thread cùng thức, chỉ một giành được khoá; những thread còn lại vào khi điều kiện đã bị tiêu thụ mất.\n3. **Cửa sổ giữa notify và lấy lại khoá**: từ lúc được đánh thức đến lúc thật sự giành lại monitor, thread khác có thể xen vào và làm điều kiện sai trở lại.\n\nVì thế mẫu đúng luôn là: `while (!condition) obj.wait();`\n\n**`notify` hay `notifyAll`**: `notify()` chọn **một** thread tuỳ ý — nếu các thread chờ vì những điều kiện khác nhau, nó có thể đánh thức nhầm thread và gây treo vĩnh viễn (lost wakeup). Mặc định dùng `notifyAll()` trừ khi chứng minh được mọi thread chờ đều tương đương.\n\n**Trong code hiện đại**, hầu như không nên tự viết `wait`/`notify`: dùng `BlockingQueue`, `CountDownLatch`, `Semaphore`, hoặc `Condition` — chúng đã xử lý sẵn mọi ca biên trên.",
+		"code": "// Mẫu chuẩn\nsynchronized (lock) {\n    while (!condition) {   // while, KHÔNG phải if\n        lock.wait();\n    }\n    consume();\n}\n\nsynchronized (lock) {\n    condition = true;\n    lock.notifyAll();      // mặc định an toàn hơn notify()\n}",
+		"tags": ["wait-notify", "sleep", "spurious-wakeup", "monitor"],
+		"quiz": {
+			"options": [
+				"`Thread.sleep()` nhả khoá đang giữ để thread khác vào được",
+				"Dùng `if` thay cho `while` khi gọi `wait()` là an toàn nếu chỉ có một thread chờ",
+				"`wait()` nhả khoá và phải được bọc trong vòng `while` vì có spurious wakeup",
+				"Gọi `wait()` ngoài block `synchronized` là hợp lệ"
+			],
+			"correct": 2,
+			"explanation": "`sleep()` **giữ** khoá. Gọi `wait()` khi không giữ monitor ném `IllegalMonitorStateException`. Vòng `while` là bắt buộc do spurious wakeup và do điều kiện có thể đổi trước khi giành lại khoá."
+		}
+	},
+	{
+		"id": "concurrency-011",
+		"topic": "concurrency",
+		"difficulty": "medium",
+		"question": "Các lớp Atomic hoạt động ra sao? `AtomicLong` và `LongAdder` khác nhau thế nào?",
+		"answerShort": "Atomic dùng CAS (compare-and-swap) — vòng lặp thử-lại không khoá. `AtomicLong` cập nhật một biến duy nhất nên bị tranh chấp nặng khi nhiều thread ghi; `LongAdder` chia thành nhiều cell rồi cộng lại lúc đọc, nhanh hơn nhiều khi ghi dày.",
+		"answerLong": "**CAS**: lệnh phần cứng \"nếu vị trí này đang mang giá trị mong đợi thì ghi giá trị mới, trả về thành công/thất bại\", thực thi nguyên tử ở mức CPU (`LOCK CMPXCHG` trên x86). Java phơi ra qua `VarHandle` (trước đây là `Unsafe`).\n\n`incrementAndGet()` thực chất là vòng lặp: đọc giá trị hiện tại → tính giá trị mới → CAS → thất bại thì lặp lại. Đây là thuật toán **lock-free**: luôn có ít nhất một thread tiến được, không có deadlock, không có chi phí park/unpark thread.\n\n**Điểm yếu**: khi tranh chấp cao, nhiều thread cùng CAS trên **một** ô nhớ. Chỉ một thắng, còn lại phải lặp — và tệ hơn là *cache line ping-pong* giữa các nhân CPU. Throughput có thể tệ hơn cả `synchronized`.\n\n**`LongAdder`** (Java 8): duy trì một mảng `Cell`, mỗi thread băm vào một cell khác nhau, cell được đệm để tránh false sharing. Ghi thì phân tán, đọc (`sum()`) mới cộng dồn.\n\n- Ghi nhiều, đọc thưa (đếm metric, request counter) → `LongAdder` nhanh hơn nhiều lần.\n- Cần giá trị chính xác tại mọi thời điểm, hoặc cần `compareAndSet` → `AtomicLong`. `LongAdder.sum()` **không** atomic so với các lần ghi đang diễn ra.\n\n**Vấn đề ABA**: giá trị đổi A→B→A khiến CAS tưởng chưa có gì thay đổi. Quan trọng với cấu trúc dữ liệu lock-free dùng con trỏ; `AtomicStampedReference` giải quyết bằng cách gắn thêm số phiên bản.\n\nHọ lớp liên quan: `AtomicReference`, `AtomicIntegerFieldUpdater`, `DoubleAdder`, `AtomicIntegerArray`.",
+		"code": "// Cập nhật phức tạp mà vẫn lock-free\nAtomicReference<Config> ref = new AtomicReference<>(initial);\nref.updateAndGet(c -> c.withTimeout(5000));   // tự lặp CAS bên trong\n\n// Đếm throughput cao -> LongAdder\nprivate final LongAdder requests = new LongAdder();\nrequests.increment();\nlong total = requests.sum();   // chỉ đọc lúc xuất metric",
+		"tags": ["atomic", "cas", "longadder", "lock-free"],
+		"quiz": {
+			"options": [
+				"`LongAdder.sum()` là thao tác atomic tuyệt đối so với các lần ghi đang diễn ra",
+				"`AtomicLong` nhanh hơn `LongAdder` khi rất nhiều thread cùng tăng giá trị",
+				"CAS là thuật toán có khoá, dựa trên `synchronized` bên dưới",
+				"`LongAdder` phân tán việc ghi ra nhiều cell nên nhanh hơn khi tranh chấp cao"
+			],
+			"correct": 3,
+			"explanation": "`LongAdder` đánh đổi độ chính xác tức thời của phép đọc lấy throughput ghi. CAS là lệnh phần cứng lock-free, không dùng monitor."
+		}
+	}
+]

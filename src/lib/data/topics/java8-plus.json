@@ -1,0 +1,202 @@
+[
+	{
+		"id": "java8-plus-001",
+		"topic": "java8-plus",
+		"difficulty": "medium",
+		"question": "Stream API hoạt động thế nào? Phân biệt intermediate và terminal operation.",
+		"answerShort": "Stream là pipeline **lười**: intermediate operation (`map`, `filter`) chỉ dựng kế hoạch và trả về stream mới; không có gì chạy cho tới khi gặp terminal operation (`collect`, `forEach`, `reduce`).",
+		"answerLong": "**Ba phần của pipeline**: nguồn (collection, mảng, `Stream.of`, `Files.lines`, generator) → 0..n intermediate operation → đúng một terminal operation.\n\n**Intermediate** (lười, trả về `Stream`): `filter`, `map`, `flatMap`, `distinct`, `sorted`, `peek`, `limit`, `skip`, `takeWhile`, `dropWhile`, `mapMulti`.\n\n**Terminal** (kích hoạt thực thi): `collect`, `toList`, `forEach`, `reduce`, `count`, `min`/`max`, `anyMatch`, `findFirst`, `toArray`.\n\n**Vì sao lười lại quan trọng**: pipeline được **hợp nhất** (fusion) — mỗi phần tử đi qua toàn bộ chuỗi toán tử một lần, thay vì tạo collection trung gian ở mỗi bước. Kết hợp với short-circuit (`findFirst`, `anyMatch`, `limit`), stream có thể dừng ngay khi đủ, kể cả với nguồn vô hạn.\n\n**Các đặc tính cần nhớ**:\n\n- Stream **dùng một lần**. Duyệt lần hai ném `IllegalStateException`.\n- Stream **không lưu trữ** dữ liệu và **không sửa** nguồn.\n- `sorted` và `distinct` là **stateful** — phải giữ dữ liệu, nên chúng phá vỡ short-circuit và không dùng được với stream vô hạn (trừ khi có `limit` trước).\n- `peek` chỉ dành cho debug. Javadoc nói rõ điều đó, và với một số nguồn nó có thể bị bỏ qua hoàn toàn khi JVM chứng minh được nó không cần thiết.\n- **Không dùng lambda có tác dụng phụ** (sửa biến bên ngoài) — sai với parallel stream và khó suy luận với stream tuần tự.\n\n`Collectors.toList()` trả về list có thể sửa nhưng không đảm bảo kiểu; `Stream.toList()` (Java 16) trả về list **bất biến** và ngắn gọn hơn — nên ưu tiên.",
+		"code": "// Không có gì chạy — thiếu terminal operation\nStream<String> s = list.stream().filter(x -> { System.out.println(x); return true; });\n\n// Short-circuit trên nguồn vô hạn\nString first = Stream.iterate(1, n -> n + 1)\n    .filter(n -> n % 7 == 0)\n    .map(String::valueOf)\n    .findFirst()      // dừng ngay khi tìm thấy\n    .orElseThrow();",
+		"tags": ["stream", "lazy", "pipeline", "short-circuit"],
+		"quiz": {
+			"options": [
+				"Intermediate operation chỉ dựng pipeline; không gì được thực thi cho tới khi có terminal operation",
+				"`map` và `filter` được thực thi ngay lập tức khi gọi",
+				"Một `Stream` có thể duyệt lại nhiều lần như `List`",
+				"`peek` là cách chuẩn để thực hiện tác dụng phụ trong pipeline"
+			],
+			"correct": 0,
+			"explanation": "Tính lười cho phép hợp nhất pipeline và short-circuit. Stream chỉ dùng một lần — duyệt lại ném `IllegalStateException`; `peek` chỉ dành cho debug."
+		}
+	},
+	{
+		"id": "java8-plus-002",
+		"topic": "java8-plus",
+		"difficulty": "medium",
+		"question": "`Optional` nên dùng thế nào cho đúng? Những cách dùng nào là phản mẫu?",
+		"answerShort": "`Optional` sinh ra để làm **kiểu trả về** cho thứ có thể vắng mặt. Phản mẫu: dùng làm field, tham số method, `Optional.get()` không kiểm tra, và `if (o.isPresent()) o.get()` thay vì `map`/`orElse`.",
+		"answerLong": "**Ý định của người thiết kế** (Brian Goetz nói rõ): `Optional` là **kiểu trả về** cho method có thể không có kết quả, để buộc caller nghĩ đến trường hợp vắng mặt. Nó **không** phải cơ chế thay thế `null` ở mọi nơi.\n\n**Phản mẫu**:\n\n1. **Field kiểu `Optional`** — nó không `Serializable`, thêm một tầng object cho mỗi field, và không giải quyết gì so với việc kiểm tra `null` bên trong class.\n2. **Tham số kiểu `Optional`** — caller vẫn phải bọc, và bây giờ có ba trạng thái cần xử lý: `null`, `Optional.empty()`, có giá trị. Dùng overload thay thế.\n3. **`get()` không kiểm tra** — chỉ đổi `NullPointerException` thành `NoSuchElementException`. Dùng `orElseThrow()` để ý định rõ ràng (từ Java 10 nó là bí danh không tham số của `get()`).\n4. **`if (o.isPresent()) { o.get() }`** — dài dòng hơn cả kiểm tra `null`. Dùng `map`/`filter`/`ifPresent`/`orElse`.\n5. **`Optional<List<T>>`** — trả về list rỗng có ý nghĩa rõ ràng hơn nhiều.\n6. **`orElse(expensive())`** — `orElse` **luôn** đánh giá tham số kể cả khi có giá trị. Dùng `orElseGet(supplier)` khi giá trị mặc định tốn kém.\n\n**API hữu ích**: `map`, `flatMap`, `filter`, `or` (Java 9, thử nguồn thay thế), `ifPresentOrElse` (Java 9), `stream()` (Java 9, biến thành stream 0–1 phần tử để nối vào pipeline).",
+		"code": "// Phản mẫu\nif (findUser(id).isPresent()) { User u = findUser(id).get(); }\nString name = findUser(id).orElse(loadDefaultFromDb());  // luôn chạy loadDefaultFromDb()\n\n// Đúng\nString name = findUser(id)\n    .map(User::name)\n    .filter(n -> !n.isBlank())\n    .orElseGet(() -> loadDefaultFromDb());   // chỉ chạy khi cần\n\nfindUser(id).ifPresentOrElse(this::render, this::renderEmpty);",
+		"tags": ["optional", "null-safety", "anti-pattern", "orelseget"],
+		"quiz": {
+			"options": [
+				"`Optional` được thiết kế để dùng làm kiểu của field trong entity",
+				"`orElse()` chỉ đánh giá tham số khi `Optional` rỗng",
+				"Dùng `Optional` làm tham số method giúp API rõ ràng hơn",
+				"`Optional` được thiết kế làm kiểu trả về; `orElseGet()` mới là lựa chọn khi giá trị mặc định tốn kém"
+			],
+			"correct": 3,
+			"explanation": "`orElse` luôn đánh giá tham số vì đó là biểu thức được truyền vào. Dùng `Optional` làm field hay tham số đều là phản mẫu đã được chính tác giả API cảnh báo."
+		}
+	},
+	{
+		"id": "java8-plus-003",
+		"topic": "java8-plus",
+		"difficulty": "medium",
+		"question": "Lambda và anonymous inner class khác nhau thế nào?",
+		"answerShort": "Lambda **không** tạo class mới (dùng `invokedynamic`, sinh ra lúc runtime), `this` trỏ tới class bao ngoài, và chỉ dùng được với functional interface. Anonymous class sinh file `.class` riêng và `this` trỏ tới chính nó.",
+		"answerLong": "| | Lambda | Anonymous inner class |\n|---|---|---|\n| Biên dịch thành | `invokedynamic` + `LambdaMetafactory` | file `Outer$1.class` |\n| Ý nghĩa của `this` | class bao ngoài | chính instance ẩn danh |\n| State | không có | có field được |\n| Áp dụng cho | chỉ functional interface | interface/class bất kỳ |\n| Thời điểm tạo instance | có thể cache lại nếu không bắt biến | mỗi lần đều tạo mới |\n\n**Chi tiết về `invokedynamic`**: compiler **không** sinh class cho lambda. Nó để lại một lệnh `invokedynamic`; lần đầu chạy, `LambdaMetafactory` mới dựng implementation. Lợi ích: giảm số class trong jar (dự án lớn có thể hàng nghìn), tăng tốc khởi động, và nếu lambda không bắt (capture) biến nào thì instance được **tái sử dụng** thay vì cấp phát mới mỗi lần.\n\n**Ý nghĩa của `this`** là khác biệt hay gây bug nhất khi refactor: trong anonymous class `this` là object ẩn danh, trong lambda `this` vẫn là object bao ngoài. Đổi từ anonymous class sang lambda mà trong thân có dùng `this` sẽ âm thầm đổi ngữ nghĩa.\n\n**Bắt biến**: cả hai chỉ bắt được biến `final` hoặc *effectively final*. Lý do là giá trị được sao chép; cho phép thay đổi sẽ sinh ra hai nguồn sự thật. Muốn thay đổi thì dùng mảng một phần tử hoặc `AtomicReference` — nhưng thường đó là dấu hiệu nên viết lại bằng `reduce`/`collect`.\n\n**Method reference** (`String::length`) là dạng gọn hơn của lambda và thường được JIT xử lý tốt hơn. Bốn loại: static, instance của object cụ thể, instance tuỳ ý của một kiểu, và constructor (`ArrayList::new`).",
+		"code": "public class Demo {\n    private String name = \"outer\";\n\n    void run() {\n        Runnable anon = new Runnable() {\n            public void run() { System.out.println(this.getClass()); } // Demo$1\n        };\n        Runnable lambda = () -> System.out.println(this.getClass());   // Demo\n    }\n}\n\n// Chỉ bắt được biến effectively final\nint count = 0;\n// list.forEach(x -> count++);   // lỗi biên dịch\nlong n = list.stream().filter(this::match).count();  // cách đúng",
+		"tags": ["lambda", "invokedynamic", "anonymous-class", "effectively-final"],
+		"quiz": {
+			"options": [
+				"Lambda được compiler biên dịch thành một file `.class` riêng giống anonymous inner class",
+				"Trong lambda, `this` trỏ tới chính lambda đó",
+				"Lambda dùng `invokedynamic` nên không sinh class riêng, và `this` trỏ tới class bao ngoài",
+				"Lambda có thể khai báo field để giữ state"
+			],
+			"correct": 2,
+			"explanation": "`LambdaMetafactory` dựng implementation lúc runtime. Vì lambda không phải một object riêng biệt về mặt phạm vi, `this` vẫn là instance bao ngoài."
+		}
+	},
+	{
+		"id": "java8-plus-004",
+		"topic": "java8-plus",
+		"difficulty": "hard",
+		"question": "Khi nào parallel stream thực sự nhanh hơn? Những rủi ro của nó?",
+		"answerShort": "Chỉ khi dữ liệu lớn (thường ≥ 10.000 phần tử), thao tác nặng CPU, nguồn tách được tốt (`ArrayList`, mảng), và không có tác dụng phụ. Rủi ro chính: dùng chung `ForkJoinPool.commonPool()` cho toàn JVM.",
+		"answerLong": "**Điều kiện để có lợi** — cần đủ **cả bốn**:\n\n1. **Đủ dữ liệu**: chi phí chia việc và gộp kết quả thường vượt lợi ích dưới ~10.000 phần tử. Con số chính xác phụ thuộc độ nặng của mỗi phần tử.\n2. **Việc mỗi phần tử đủ nặng và CPU-bound**. Tác vụ I/O-bound làm nghẽn `commonPool` — dùng virtual thread hoặc executor riêng.\n3. **Nguồn tách được đều**: `ArrayList`, mảng, `IntStream.range` tách hoàn hảo. `LinkedList`, `Stream.iterate`, `BufferedReader.lines` tách rất tệ vì phải duyệt tuần tự.\n4. **Không tác dụng phụ và toán tử có tính kết hợp**. `reduce` với hàm không kết hợp cho kết quả sai một cách ngẫu nhiên.\n\n**Rủi ro lớn nhất — `commonPool` dùng chung**: parallel stream mặc định chạy trên `ForkJoinPool.commonPool()` với kích thước `số nhân − 1`, dùng chung cho **toàn bộ JVM**. Một stream chậm (nhất là chặn I/O) làm đói mọi parallel stream và `CompletableFuture` khác trong ứng dụng. Trong container 1 CPU, pool này chỉ có... 0 worker phụ, nên parallel stream chạy hoàn toàn trên thread gọi.\n\n**Cách chạy trên pool riêng**: submit stream vào một `ForkJoinPool` tự tạo — đây là thủ thuật dựa vào chi tiết cài đặt, hoạt động nhưng không phải API chính thức.\n\n**Các bẫy khác**:\n\n- `forEach` **không** đảm bảo thứ tự; cần thứ tự thì dùng `forEachOrdered` (và mất phần lớn lợi ích).\n- Thu vào collection không thread-safe qua `forEach` → hỏng dữ liệu. Luôn dùng `collect`.\n- `findFirst` đắt hơn `findAny` trong parallel vì phải tôn trọng thứ tự gặp.\n\n**Kết luận thực dụng**: mặc định dùng sequential. Chuyển sang parallel chỉ sau khi **đo bằng JMH** trên dữ liệu thật.",
+		"code": "// Hợp lý: nhiều dữ liệu, CPU-bound, nguồn tách tốt\nlong primes = IntStream.rangeClosed(2, 10_000_000)\n    .parallel()\n    .filter(Demo::isPrime)\n    .count();\n\n// Sai: I/O-bound làm nghẽn commonPool của cả JVM\n// urls.parallelStream().map(this::httpGet).toList();\n\n// Chạy trên pool riêng (dựa vào chi tiết cài đặt, không phải API chính thức)\nForkJoinPool pool = new ForkJoinPool(8);\nList<R> out = pool.submit(() -> data.parallelStream().map(this::heavy).toList()).join();",
+		"tags": ["parallel-stream", "forkjoinpool", "performance", "spliterator"],
+		"quiz": {
+			"options": [
+				"Parallel stream luôn nhanh hơn sequential khi máy có nhiều nhân",
+				"`LinkedList` là nguồn lý tưởng cho parallel stream",
+				"Parallel stream tự tạo thread pool riêng cho mỗi lần gọi",
+				"Parallel stream mặc định dùng chung `ForkJoinPool.commonPool()` của toàn JVM"
+			],
+			"correct": 3,
+			"explanation": "Dùng chung `commonPool` là rủi ro lớn nhất — một pipeline chặn I/O làm đói mọi thứ khác. `LinkedList` tách rất tệ vì phải duyệt tuần tự để chia đôi."
+		}
+	},
+	{
+		"id": "java8-plus-005",
+		"topic": "java8-plus",
+		"difficulty": "medium",
+		"question": "`record` trong Java 16+ là gì? Khi nào nên dùng?",
+		"answerShort": "`record` là class mang dữ liệu bất biến, trong suốt: compiler tự sinh constructor, accessor, `equals`, `hashCode`, `toString`. Dùng cho DTO, value object, kết quả trung gian — không dùng cho JPA entity.",
+		"answerLong": "**Compiler sinh tự động**: field `private final`, canonical constructor, accessor cùng tên field (`name()` chứ không phải `getName()`), `equals`/`hashCode` dựa trên toàn bộ component, và `toString`.\n\n**Ràng buộc**: `record` là `final` ngầm định, không kế thừa được class khác (đã kế thừa `java.lang.Record`), không thêm được field instance. Nhưng nó **được phép** implement interface, có method static/instance, và có nhiều constructor.\n\n**Compact constructor** — nơi đặt validation và defensive copy, chạy trước khi gán field:\n\n```java\nrecord Range(int lo, int hi) {\n    Range {\n        if (lo > hi) throw new IllegalArgumentException();\n    }\n}\n```\n\n**Dùng cho**: DTO của API, kết quả truy vấn, value object trong domain, key của `Map` (`equals`/`hashCode` sinh sẵn nên rất tiện), kiểu trả về nhiều giá trị, và các nhánh của sealed interface.\n\n**Không dùng cho JPA entity** — vì entity cần constructor không tham số, field mutable, và proxy để lazy loading. `record` chống lại cả ba điều đó. Dùng entity thường và ánh xạ sang record ở tầng ngoài.\n\n**Kết hợp mạnh nhất**: `sealed interface` + `record` + pattern matching cho `switch` (chính thức từ Java 21) — tạo thành kiểu tổng (sum type) đầy đủ với kiểm tra vét cạn ngay lúc biên dịch.\n\n**Lưu ý**: `record` không tự defensive copy — field kiểu `List` hay mảng vẫn phải copy thủ công trong compact constructor.",
+		"code": "sealed interface Shape permits Circle, Square {}\nrecord Circle(double radius) implements Shape {}\nrecord Square(double side)   implements Shape {}\n\n// Pattern matching for switch — compiler kiểm tra vét cạn\ndouble area(Shape s) {\n    return switch (s) {\n        case Circle c -> Math.PI * c.radius() * c.radius();\n        case Square q -> q.side() * q.side();\n    };  // không cần default: sealed đảm bảo đã phủ hết\n}",
+		"tags": ["record", "sealed", "pattern-matching", "immutable"],
+		"quiz": {
+			"options": [
+				"`record` là lựa chọn tốt để làm JPA entity vì nó gọn hơn class thường",
+				"`record` tự động defensive copy các field kiểu `List`",
+				"Accessor của `record` có tên theo chuẩn JavaBean, ví dụ `getName()`",
+				"`record` sinh sẵn `equals`/`hashCode` dựa trên toàn bộ component nên rất hợp làm key của `Map`"
+			],
+			"correct": 3,
+			"explanation": "Accessor mang đúng tên component (`name()`). JPA cần constructor rỗng và field mutable nên `record` không phù hợp, và defensive copy vẫn phải viết tay."
+		}
+	},
+	{
+		"id": "java8-plus-006",
+		"topic": "java8-plus",
+		"difficulty": "medium",
+		"question": "`Collectors` có những collector nào hay dùng? `groupingBy` khác `partitioningBy` thế nào?",
+		"answerShort": "`toList`, `toMap`, `joining`, `counting`, `summingInt`, `groupingBy`, `partitioningBy`. `groupingBy` gom theo khoá bất kỳ; `partitioningBy` chỉ chia đúng hai nhóm theo predicate và **luôn** có cả khoá `true` lẫn `false`.",
+		"answerLong": "**Nhóm collector chính**:\n\n- **Gom**: `toList()`, `toSet()`, `toCollection(TreeSet::new)`, `toUnmodifiableList()`.\n- **Về Map**: `toMap(key, value)` — ném `IllegalStateException` khi khoá trùng, nên gần như luôn cần overload thứ ba là hàm hợp nhất. `toMap` cũng ném `NullPointerException` nếu value là `null`, khác với `HashMap.put`.\n- **Chuỗi**: `joining(\", \", \"[\", \"]\")`.\n- **Thống kê**: `counting()`, `summingInt`, `averagingDouble`, `summarizingInt` (trả về cả count/sum/min/max/average trong một lần duyệt).\n- **Gom nhóm**: `groupingBy(classifier)` và `groupingBy(classifier, downstream)`.\n- **Chia đôi**: `partitioningBy(predicate)` — kết quả luôn có đủ hai khoá `true`/`false`, kể cả khi một nhóm rỗng. `groupingBy` với predicate thì có thể thiếu khoá.\n- **Java 12+**: `teeing(c1, c2, merger)` — chạy hai collector trên cùng một luồng dữ liệu rồi gộp.\n\n**Sức mạnh thật sự nằm ở downstream collector** — chúng lồng nhau được nhiều tầng, cho phép diễn tả những phép tổng hợp phức tạp trong một lần duyệt.\n\n**Bẫy hay gặp**:\n\n- `groupingBy` trả về `HashMap` nên không đảm bảo thứ tự khoá; cần thứ tự thì truyền `TreeMap::new` hoặc `LinkedHashMap::new` làm mapFactory.\n- Cần map đồng thời thì dùng `groupingByConcurrent` (chỉ có ý nghĩa với parallel stream **và** stream không có thứ tự).\n- `Collectors.toList()` không đảm bảo trả về list bất biến hay khả biến; muốn rõ ràng thì dùng `Stream.toList()` (bất biến) hoặc `toCollection(ArrayList::new)` (khả biến).",
+		"code": "// Đếm nhân viên theo phòng ban, sắp xếp theo tên phòng\nMap<String, Long> byDept = employees.stream()\n    .collect(groupingBy(Employee::department, TreeMap::new, counting()));\n\n// Lồng nhiều tầng: phòng ban -> chức danh -> tổng lương\nMap<String, Map<String, Integer>> nested = employees.stream()\n    .collect(groupingBy(Employee::department,\n             groupingBy(Employee::title, summingInt(Employee::salary))));\n\n// toMap luôn nên có hàm hợp nhất để tránh IllegalStateException\nMap<String, Employee> byEmail = employees.stream()\n    .collect(toMap(Employee::email, e -> e, (a, b) -> a));",
+		"tags": ["collectors", "groupingby", "partitioningby", "downstream"],
+		"quiz": {
+			"options": [
+				"`partitioningBy` luôn trả về map có đủ cả hai khoá `true` và `false`, kể cả khi một nhóm rỗng",
+				"`toMap` tự động bỏ qua khoá trùng và giữ lại giá trị cuối cùng",
+				"`groupingBy` đảm bảo thứ tự khoá theo thứ tự xuất hiện trong stream",
+				"Downstream collector chỉ lồng được tối đa một tầng"
+			],
+			"correct": 0,
+			"explanation": "`toMap` hai tham số ném `IllegalStateException` khi trùng khoá. `groupingBy` trả `HashMap` nên không có thứ tự, và downstream collector lồng được tuỳ ý."
+		}
+	},
+	{
+		"id": "java8-plus-007",
+		"topic": "java8-plus",
+		"difficulty": "easy",
+		"question": "Functional interface là gì? Kể các interface có sẵn hay dùng nhất.",
+		"answerShort": "Là interface có **đúng một** abstract method, nên gán được bằng lambda. Hay dùng nhất: `Function<T,R>`, `Consumer<T>`, `Supplier<T>`, `Predicate<T>`, `BiFunction`, `UnaryOperator`, `Runnable`, `Callable`.",
+		"answerLong": "**Định nghĩa**: đúng một abstract method (SAM — Single Abstract Method). Method `default`, `static` và các method public của `Object` (`equals`, `hashCode`, `toString`) không tính. `@FunctionalInterface` là tuỳ chọn nhưng nên có — nó khiến compiler kiểm tra giúp và ngăn người sau vô tình thêm method thứ hai.\n\n**Các interface chính trong `java.util.function`**:\n\n| Interface | Chữ ký | Dùng cho |\n|---|---|---|\n| `Function<T,R>` | `R apply(T)` | biến đổi |\n| `Consumer<T>` | `void accept(T)` | tác dụng phụ |\n| `Supplier<T>` | `T get()` | tạo giá trị lười |\n| `Predicate<T>` | `boolean test(T)` | lọc |\n| `UnaryOperator<T>` | `T apply(T)` | `Function<T,T>` |\n| `BiFunction<T,U,R>` | `R apply(T,U)` | hai tham số |\n| `BinaryOperator<T>` | `T apply(T,T)` | dùng trong `reduce` |\n\n**Biến thể primitive** — `IntFunction`, `ToIntFunction`, `IntPredicate`, `IntUnaryOperator`... tồn tại để **tránh autoboxing**. Với stream hàng triệu phần tử, khác biệt hiệu năng là đáng kể: dùng `IntStream`/`mapToInt` thay vì `Stream<Integer>`.\n\n**Method mặc định để tổ hợp**: `Function.andThen`, `Function.compose`, `Predicate.and/or/negate`, `Consumer.andThen`, `Comparator.thenComparing`. Nhờ chúng, hàm nhỏ ghép được thành hàm lớn mà không cần class trung gian.\n\n**Từ ngoài JDK**: Spring có `Converter<S,T>`, `Supplier` trong cấu hình lười; nhiều thư viện định nghĩa functional interface cho phép **checked exception**, vì JDK không có.",
+		"code": "@FunctionalInterface\ninterface Validator<T> {\n    List<String> validate(T value);\n\n    default Validator<T> and(Validator<T> other) {   // tổ hợp\n        return v -> Stream.concat(validate(v).stream(), other.validate(v).stream()).toList();\n    }\n}\n\n// Tránh autoboxing với dữ liệu lớn\nint sum = IntStream.range(0, 1_000_000).map(i -> i * 2).sum();",
+		"tags": ["functional-interface", "lambda", "sam", "primitive-specialization"],
+		"quiz": {
+			"options": [
+				"Functional interface có đúng một abstract method; `default` và `static` method không tính vào",
+				"`@FunctionalInterface` là annotation bắt buộc để lambda hoạt động",
+				"Functional interface không được phép có method `default`",
+				"`IntFunction` tồn tại chỉ để đặt tên cho dễ đọc, không ảnh hưởng hiệu năng"
+			],
+			"correct": 0,
+			"explanation": "Annotation chỉ giúp compiler kiểm tra, không bắt buộc. Biến thể primitive tồn tại để tránh autoboxing — điều này ảnh hưởng hiệu năng thật với dữ liệu lớn."
+		}
+	},
+	{
+		"id": "java8-plus-008",
+		"topic": "java8-plus",
+		"difficulty": "medium",
+		"question": "API date/time mới (`java.time`) hơn `Date`/`Calendar` ở điểm nào?",
+		"answerShort": "`java.time` (JSR-310) bất biến và thread-safe, có kiểu riêng cho từng khái niệm (`LocalDate`, `Instant`, `ZonedDateTime`), tháng đánh số từ 1, và API rõ ràng. `Date`/`Calendar` khả biến, đánh số tháng từ 0 và trộn lẫn khái niệm.",
+		"answerLong": "**Các khuyết tật của API cũ**:\n\n- `Date` **khả biến** → không thread-safe, phải defensive copy khắp nơi.\n- `Calendar.MONTH` đánh số **từ 0** (tháng 1 là 0) — nguồn bug bất tận.\n- `SimpleDateFormat` **không thread-safe** nhưng lại hay được khai báo `static` — bug đa luồng kinh điển, sinh ra ngày sai một cách ngẫu nhiên.\n- `java.util.Date` thật ra là một timestamp nhưng lại được đặt tên và dùng như một ngày.\n- `java.sql.Date` kế thừa `java.util.Date` nhưng ném exception ở một nửa số method — vi phạm nguyên lý thay thế Liskov ngay trong JDK.\n\n**Các kiểu chính của `java.time`** — chọn đúng kiểu là phần quan trọng nhất:\n\n| Kiểu | Ý nghĩa | Dùng cho |\n|---|---|---|\n| `LocalDate` | ngày, không giờ, không múi giờ | ngày sinh, ngày hết hạn |\n| `LocalTime` | giờ trong ngày | giờ mở cửa |\n| `LocalDateTime` | ngày + giờ, **không** múi giờ | lịch hẹn theo giờ địa phương |\n| `Instant` | một điểm trên trục thời gian UTC | timestamp sự kiện, log |\n| `ZonedDateTime` | `Instant` + múi giờ | hiển thị cho người dùng |\n| `Duration` | khoảng thời gian theo giây/nano | đo thời lượng |\n| `Period` | khoảng theo năm/tháng/ngày | tính tuổi |\n\n**Quy tắc thực dụng**: lưu **`Instant`/UTC** trong database, chuyển sang múi giờ người dùng chỉ ở tầng hiển thị. `LocalDateTime` không xác định được thời điểm tuyệt đối — dùng nó cho timestamp là bug chờ ngày phát nổ khi đổi giờ mùa.\n\n`DateTimeFormatter` bất biến và thread-safe, nên khai báo `static final` được — hoàn toàn ngược với `SimpleDateFormat`.",
+		"code": "// static final AN TOÀN với DateTimeFormatter\nprivate static final DateTimeFormatter FMT = DateTimeFormatter.ISO_LOCAL_DATE;\n\nLocalDate birth = LocalDate.of(1995, 6, 15);        // tháng đánh số từ 1\nint age = Period.between(birth, LocalDate.now()).getYears();\n\n// Lưu UTC, hiển thị theo múi giờ người dùng\nInstant now = Instant.now();\nZonedDateTime display = now.atZone(ZoneId.of(\"Asia/Ho_Chi_Minh\"));",
+		"tags": ["java-time", "localdate", "instant", "timezone"],
+		"quiz": {
+			"options": [
+				"`SimpleDateFormat` thread-safe nên khai báo `static` được",
+				"`java.time` bất biến và thread-safe, còn `Calendar.MONTH` đánh số tháng từ 0",
+				"`LocalDateTime` xác định được một thời điểm tuyệt đối trên trục thời gian",
+				"`Duration` dùng để tính khoảng cách theo năm và tháng"
+			],
+			"correct": 1,
+			"explanation": "`SimpleDateFormat` **không** thread-safe. `LocalDateTime` thiếu múi giờ nên không xác định thời điểm tuyệt đối, và `Period` mới là kiểu tính theo năm/tháng/ngày."
+		}
+	},
+	{
+		"id": "java8-plus-009",
+		"topic": "java8-plus",
+		"difficulty": "medium",
+		"question": "`sealed` class/interface từ Java 17 giải quyết bài toán gì?",
+		"answerShort": "`sealed` cho phép khai báo **chính xác** những class nào được kế thừa. Nhờ đó compiler kiểm tra vét cạn được trong `switch`, và ta mô hình hoá được kiểu tổng (sum type) mà không cần mở toàn bộ hệ phân cấp.",
+		"answerLong": "**Trước Java 17 chỉ có hai cực**: `final` (không ai kế thừa được) hoặc mở hoàn toàn (ai cũng kế thừa được). Không có cách nào nói \"chỉ ba lớp này được kế thừa\".\n\n**Cú pháp**: `sealed interface Shape permits Circle, Square, Triangle`. Mỗi lớp con **bắt buộc** khai báo một trong ba:\n\n- `final` — dừng hệ phân cấp tại đây.\n- `sealed` — tiếp tục giới hạn ở tầng sau.\n- `non-sealed` — mở lại cho kế thừa tự do.\n\nCác lớp con phải nằm cùng module (hoặc cùng package nếu không dùng module). Nếu chúng ở cùng file thì `permits` được suy ra và có thể bỏ.\n\n**Lợi ích lớn nhất — kiểm tra vét cạn**: `switch` trên một kiểu sealed không cần nhánh `default`. Khi thêm một lớp con mới, mọi `switch` chưa xử lý nó trở thành **lỗi biên dịch**. Nhánh `default` sẽ che mất chính điều này — đó là lý do nên bỏ `default` với kiểu sealed.\n\n**Kết hợp với record pattern (Java 21)**: rã cấu trúc lồng nhau ngay trong `case`, tạo thành hệ thống mô hình hoá dữ liệu kiểu đại số hoàn chỉnh.\n\n**Trường hợp dùng điển hình**: mô hình hoá kết quả (`Success`/`Failure`), AST của trình biên dịch/DSL, máy trạng thái, các biến thể của một sự kiện domain. Đây là những chỗ mà trước kia phải dùng visitor pattern — nhiều code, khó đọc.",
+		"code": "sealed interface Result<T> permits Success, Failure {}\nrecord Success<T>(T value) implements Result<T> {}\nrecord Failure<T>(String code, String message) implements Result<T> {}\n\nString describe(Result<User> r) {\n    return switch (r) {\n        case Success<User>(User u) -> \"OK: \" + u.name();      // record pattern, Java 21\n        case Failure<User> f      -> \"Lỗi \" + f.code();\n    };  // thêm nhánh Result mới -> switch này báo lỗi biên dịch ngay\n}",
+		"tags": ["sealed", "exhaustive", "pattern-matching", "sum-type"],
+		"quiz": {
+			"options": [
+				"`sealed` class không cho phép bất kỳ lớp nào kế thừa, giống hệt `final`",
+				"Nên luôn thêm nhánh `default` khi `switch` trên kiểu sealed",
+				"Lớp con của `sealed` class không cần khai báo thêm gì cả",
+				"`sealed` cho phép compiler kiểm tra vét cạn trong `switch`, nên thêm lớp con mới sẽ gây lỗi biên dịch ở nơi chưa xử lý"
+			],
+			"correct": 3,
+			"explanation": "Đó chính là giá trị lớn nhất của `sealed`. Nhánh `default` sẽ vô hiệu hoá kiểm tra vét cạn, và mỗi lớp con bắt buộc phải là `final`, `sealed` hoặc `non-sealed`."
+		}
+	},
+	{
+		"id": "java8-plus-010",
+		"topic": "java8-plus",
+		"difficulty": "easy",
+		"question": "`map()` và `flatMap()` khác nhau thế nào?",
+		"answerShort": "`map` biến mỗi phần tử thành đúng một phần tử (1→1). `flatMap` biến mỗi phần tử thành một stream rồi **làm phẳng** tất cả thành một stream duy nhất (1→n), dùng khi kết quả biến đổi lại là collection hoặc stream.",
+		"answerLong": "**`map(Function<T,R>)`** — số phần tử không đổi. `Stream<T>` → `Stream<R>`.\n\n**`flatMap(Function<T, Stream<R>>)`** — mỗi phần tử sinh ra 0..n phần tử, kết quả được nối lại thành một stream phẳng. `Stream<T>` → `Stream<R>` (không phải `Stream<Stream<R>>`).\n\nQuy tắc nhận biết: nếu dùng `map` mà kiểu kết quả là `Stream<List<X>>` hay `Stream<Optional<X>>`, thì thứ bạn cần là `flatMap`.\n\n**Các trường hợp dùng điển hình**:\n\n- Làm phẳng cấu trúc lồng: danh sách đơn hàng → tất cả các dòng hàng.\n- Tách chuỗi: dòng văn bản → từng từ.\n- Bỏ `Optional` rỗng: `stream.flatMap(Optional::stream)` (Java 9) — gọn hơn `filter(isPresent).map(get)`.\n- `Optional.flatMap` — nối chuỗi các phép tra cứu có thể vắng mặt mà không sinh `Optional<Optional<T>>`.\n- `CompletableFuture.thenCompose` chính là `flatMap` của thế giới bất đồng bộ.\n\n**Java 16 thêm `mapMulti`** — thay vì tạo một stream trung gian cho mỗi phần tử, nó đẩy kết quả qua một `Consumer`. Nhanh hơn khi mỗi phần tử chỉ sinh ra rất ít kết quả, vì tránh được chi phí tạo stream.",
+		"code": "// map cho ra stream lồng nhau\nStream<List<Item>> nested = orders.stream().map(Order::items);\n\n// flatMap làm phẳng\nList<Item> all = orders.stream()\n    .flatMap(o -> o.items().stream())\n    .toList();\n\n// Bỏ Optional rỗng gọn gàng (Java 9+)\nList<User> found = ids.stream()\n    .map(this::findUser)          // Stream<Optional<User>>\n    .flatMap(Optional::stream)    // Stream<User>\n    .toList();",
+		"tags": ["map", "flatmap", "stream", "optional"],
+		"quiz": {
+			"options": [
+				"`flatMap` biến mỗi phần tử thành một stream rồi làm phẳng tất cả thành một stream duy nhất",
+				"`map` có thể làm phẳng cấu trúc lồng nhau nếu hàm trả về `List`",
+				"`flatMap` luôn giữ nguyên số lượng phần tử của stream ban đầu",
+				"`Optional` không có method `flatMap`"
+			],
+			"correct": 0,
+			"explanation": "`map` giữ nguyên số phần tử và sẽ cho `Stream<List<X>>` khi hàm trả về list. `flatMap` thay đổi số lượng phần tử, và `Optional` cũng có `flatMap` để nối chuỗi tra cứu."
+		}
+	}
+]

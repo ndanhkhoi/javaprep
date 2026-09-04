@@ -1,0 +1,277 @@
+[
+	{
+		"id": "spring-core-001",
+		"topic": "spring-core",
+		"difficulty": "easy",
+		"question": "IoC và Dependency Injection là gì? Spring cài đặt chúng thế nào?",
+		"answerShort": "IoC là đảo ngược quyền điều khiển: framework tạo và nối các object thay vì class tự làm. DI là cách hiện thực IoC — dependency được **tiêm vào** từ ngoài. Spring dùng `ApplicationContext` làm container quản lý bean.",
+		"answerLong": "**Vấn đề nếu không có IoC**: class tự `new` dependency của mình. Hệ quả là nó gắn chặt với một implementation cụ thể, không mock được khi test, và mọi thay đổi về cách khởi tạo lan ra khắp code.\n\n**IoC (Inversion of Control)**: quyền quyết định \"dùng implementation nào và tạo lúc nào\" chuyển từ class sang container. Class chỉ khai báo **cần gì**, không quan tâm **lấy ở đâu**.\n\n**DI (Dependency Injection)** là dạng IoC phổ biến nhất. Ba cách tiêm:\n\n1. **Constructor injection** — **được khuyến nghị**. Dependency là `final`, object không bao giờ tồn tại ở trạng thái nửa vời, dễ test bằng `new`, và nếu constructor có quá nhiều tham số thì đó là tín hiệu rõ ràng rằng class đang làm quá nhiều việc. Từ Spring 4.3, class chỉ có một constructor thì không cần `@Autowired`.\n2. **Setter injection** — cho dependency tuỳ chọn hoặc cần cấu hình lại.\n3. **Field injection** (`@Autowired` trên field) — **nên tránh**: không tạo được object bằng `new` trong test nếu không dùng reflection, field không `final` được, và nó che giấu việc class có quá nhiều dependency.\n\n**Container**: `BeanFactory` là interface gốc (khởi tạo lười); `ApplicationContext` mở rộng thêm i18n, event publishing, AOP và khởi tạo sẵn (eager) bean singleton — nên phát hiện lỗi cấu hình ngay lúc khởi động thay vì lúc chạy.\n\n**Lợi ích thực tế**: dễ test, dễ thay implementation, quản lý vòng đời tập trung, và đây là nền tảng để Spring chèn AOP (transaction, security, cache) một cách trong suốt.",
+		"code": "// Được khuyến nghị: constructor injection, field final\n@Service\npublic class OrderService {\n    private final OrderRepository repo;\n    private final PaymentGateway gateway;\n\n    public OrderService(OrderRepository repo, PaymentGateway gateway) { // không cần @Autowired\n        this.repo = repo;\n        this.gateway = gateway;\n    }\n}\n\n// Test không cần Spring context\nvar service = new OrderService(mockRepo, mockGateway);",
+		"tags": [
+			"ioc",
+			"dependency-injection",
+			"constructor-injection",
+			"applicationcontext"
+		],
+		"quiz": {
+			"options": [
+				"Constructor injection được khuyến nghị vì cho phép field `final` và tạo object trong test mà không cần Spring",
+				"Field injection là cách tốt nhất vì code ngắn gọn nhất",
+				"`BeanFactory` khởi tạo sẵn toàn bộ bean singleton lúc khởi động",
+				"DI khiến class phải tự quyết định implementation nào sẽ được dùng"
+			],
+			"correct": 0,
+			"explanation": "Field injection cản trở việc test bằng `new` và không cho phép `final`. `ApplicationContext` mới là loại khởi tạo sẵn bean singleton; `BeanFactory` khởi tạo lười."
+		}
+	},
+	{
+		"id": "spring-core-002",
+		"topic": "spring-core",
+		"difficulty": "medium",
+		"question": "Bean scope trong Spring có những loại nào? `singleton` khác `prototype` ra sao?",
+		"answerShort": "`singleton` (mặc định): một instance cho mỗi container. `prototype`: tạo mới mỗi lần lấy ra, và Spring **không** quản lý vòng đời sau đó. Scope web: `request`, `session`, `application`, `websocket`.",
+		"answerLong": "**`singleton`** — mặc định. Một instance duy nhất **cho mỗi `ApplicationContext`** (không phải cho mỗi JVM như singleton pattern cổ điển). Được tạo sẵn lúc khởi động, cache lại trong container.\n\n**`prototype`** — tạo instance mới mỗi lần được yêu cầu. Điểm mấu chốt: Spring **tiêm xong là buông** — callback huỷ (`@PreDestroy`, `DisposableBean`) **không** được gọi. Nếu bean giữ tài nguyên cần đóng, ứng dụng phải tự lo.\n\n**Scope web**: `request` (mỗi HTTP request), `session` (mỗi phiên người dùng), `application` (mỗi `ServletContext`), `websocket`.\n\n**Vấn đề kinh điển — bean scope hẹp bị tiêm vào bean singleton**: singleton chỉ được tiêm **một lần** lúc khởi tạo, nên nó sẽ giữ mãi cùng một instance prototype/request. Ba cách giải quyết:\n\n1. `@Scope(value = \"prototype\", proxyMode = ScopedProxyMode.TARGET_CLASS)` — tiêm một proxy, mỗi lần gọi method proxy sẽ lấy instance đúng.\n2. Tiêm `ObjectProvider<T>` (hoặc `Provider<T>` của JSR-330) và gọi `getObject()` khi cần.\n3. Method injection với `@Lookup`.\n\n**Điểm quan trọng nhất về singleton**: nó được chia sẻ giữa mọi thread, nên bean singleton **phải không có state khả biến**. Đây là nguyên nhân số một của bug đa luồng khó tái hiện trong ứng dụng Spring: một field khả biến trong `@Service` bị nhiều request ghi đè lẫn nhau.",
+		"code": "@Service\npublic class ReportService {\n    private final ObjectProvider<ReportBuilder> builders;   // builder là prototype\n\n    public Report build(Data d) {\n        ReportBuilder b = builders.getObject();   // instance mới mỗi lần gọi\n        return b.with(d).build();\n    }\n}\n\n// Bean singleton PHẢI không có state khả biến\n@Service\npublic class Bad {\n    private String currentUser;   // race condition giữa các request\n}",
+		"tags": [
+			"bean-scope",
+			"singleton",
+			"prototype",
+			"objectprovider"
+		],
+		"quiz": {
+			"options": [
+				"Bean `prototype` được Spring gọi `@PreDestroy` khi không còn được dùng",
+				"Bean `singleton` là duy nhất trên toàn JVM, kể cả khi có nhiều `ApplicationContext`",
+				"Tiêm bean `prototype` vào bean `singleton` sẽ tự động tạo instance mới ở mỗi lần gọi",
+				"Bean `singleton` được chia sẻ giữa mọi thread nên không được giữ state khả biến"
+			],
+			"correct": 3,
+			"explanation": "Singleton là duy nhất **cho mỗi container**. Spring buông bean prototype sau khi tiêm nên không gọi callback huỷ, và cần scoped proxy hoặc `ObjectProvider` để lấy instance mới."
+		}
+	},
+	{
+		"id": "spring-core-003",
+		"topic": "spring-core",
+		"difficulty": "medium",
+		"question": "Vòng đời của một bean trong Spring diễn ra qua những bước nào?",
+		"answerShort": "Instantiation → tiêm dependency → `*Aware` callback → `BeanPostProcessor` trước → `@PostConstruct` → `afterPropertiesSet()` → `BeanPostProcessor` sau (nơi AOP proxy sinh ra) → dùng → `@PreDestroy` → `destroy()`.",
+		"answerLong": "**Thứ tự đầy đủ**:\n\n1. **Instantiation** — container gọi constructor (hoặc factory method).\n2. **Populate properties** — tiêm dependency qua setter/field.\n3. **`*Aware` callbacks** — `BeanNameAware`, `BeanFactoryAware`, `ApplicationContextAware`.\n4. **`BeanPostProcessor.postProcessBeforeInitialization()`**.\n5. **`@PostConstruct`** (chuẩn JSR-250, được khuyến nghị).\n6. **`InitializingBean.afterPropertiesSet()`** — gắn code vào interface của Spring, ít dùng hơn.\n7. **`@Bean(initMethod = \"...\")`**.\n8. **`BeanPostProcessor.postProcessAfterInitialization()`** — **đây là nơi AOP proxy được tạo ra**, thay bean gốc bằng proxy bọc ngoài.\n9. Bean sẵn sàng phục vụ.\n10. Khi context đóng: **`@PreDestroy`** → `DisposableBean.destroy()` → `@Bean(destroyMethod = \"...\")`.\n\n**Ba điều đáng nhớ nhất**:\n\n- **AOP proxy được tạo ở bước 8**, sau khi khởi tạo xong. Đó là lý do gọi một method `@Transactional` từ bên trong cùng class không có tác dụng: lời gọi nội bộ đi thẳng vào `this`, không qua proxy.\n- **`BeanPostProcessor` áp dụng cho mọi bean**, còn `BeanFactoryPostProcessor` sửa **định nghĩa** bean trước khi bất kỳ instance nào được tạo (`PropertySourcesPlaceholderConfigurer` hoạt động theo cách này).\n- Bean scope `prototype` **không** đi qua giai đoạn huỷ.\n\n**Về `@PostConstruct` từ Spring Boot 3**: nó nằm trong `jakarta.annotation`, không còn là `javax.annotation` — một trong những thay đổi kéo theo khi Java EE đổi tên thành Jakarta EE.",
+		"code": "@Component\npublic class CacheWarmer {\n    private final Repo repo;\n    private Map<String, Item> cache;\n\n    public CacheWarmer(Repo repo) { this.repo = repo; }   // 1-2\n\n    @PostConstruct                                         // 5\n    void warmUp() { this.cache = repo.loadAll(); }\n\n    @PreDestroy                                            // 10\n    void flush() { cache.clear(); }\n}",
+		"tags": [
+			"bean-lifecycle",
+			"postconstruct",
+			"beanpostprocessor",
+			"aop-proxy"
+		],
+		"quiz": {
+			"options": [
+				"AOP proxy được tạo ngay trong constructor của bean",
+				"`@PreDestroy` được gọi cho cả bean `prototype`",
+				"AOP proxy được tạo ở `postProcessAfterInitialization`, nên lời gọi method nội bộ trong cùng class không đi qua proxy",
+				"`@PostConstruct` chạy trước khi dependency được tiêm vào"
+			],
+			"correct": 2,
+			"explanation": "Đây là lý do gốc rễ khiến `@Transactional` hay `@Cacheable` không hoạt động với self-invocation. `@PostConstruct` chạy **sau** khi tiêm dependency, và bean prototype không có giai đoạn huỷ."
+		}
+	},
+	{
+		"id": "spring-core-004",
+		"topic": "spring-core",
+		"difficulty": "medium",
+		"question": "Circular dependency trong Spring là gì? Xử lý thế nào?",
+		"answerShort": "Hai bean cần nhau để khởi tạo. Spring giải được cho **setter/field injection** bằng cache ba tầng, nhưng **không** giải được cho constructor injection. Từ Spring Boot 2.6 nó bị cấm mặc định — cách đúng là tái cấu trúc thiết kế.",
+		"answerLong": "**Vì sao constructor injection không giải được**: để tạo A cần có B đã hoàn chỉnh, để tạo B cần có A đã hoàn chỉnh — không có điểm bắt đầu. Spring ném `BeanCurrentlyInCreationException`.\n\n**Vì sao setter injection giải được**: Spring dùng **cache ba tầng**:\n\n1. `singletonObjects` — bean đã hoàn chỉnh.\n2. `earlySingletonObjects` — bean đã tạo xong constructor nhưng chưa tiêm đủ.\n3. `singletonFactories` — factory tạo tham chiếu sớm (chỗ này cần thiết để tạo proxy AOP đúng lúc).\n\nQuy trình: tạo A (chưa tiêm) → đưa tham chiếu sớm của A vào tầng 3 → tiêm B vào A → B cần A → lấy tham chiếu sớm từ tầng 3 → B hoàn thành → A hoàn thành.\n\n**Từ Spring Boot 2.6**, `spring.main.allow-circular-references` mặc định là `false`. Ứng dụng có vòng phụ thuộc sẽ **không khởi động được**. Đây là quyết định có chủ đích: vòng phụ thuộc gần như luôn là dấu hiệu ranh giới trách nhiệm bị vẽ sai.\n\n**Cách xử lý, theo thứ tự nên ưu tiên**:\n\n1. **Tái cấu trúc** — tách phần logic dùng chung ra một class thứ ba. Đây là cách đúng trong đại đa số trường hợp.\n2. **Xem lại trách nhiệm** — vòng phụ thuộc thường có nghĩa là hai class thật ra là một khái niệm, hoặc bị chia sai chỗ.\n3. **Dùng event** (`ApplicationEventPublisher`) để đảo chiều một nhánh phụ thuộc.\n4. `@Lazy` trên một phía — tiêm proxy, hoãn khởi tạo. Chỉ là băng dán.\n5. Bật lại cờ cho phép — chỉ dùng tạm khi đang nâng cấp hệ thống cũ.\n\n**Lưu ý**: `@Lazy` và setter injection **không** giải quyết được vòng phụ thuộc giữa hai bean `@Async` hoặc bean được proxy phức tạp — trong những trường hợp đó chỉ còn cách tái cấu trúc.",
+		"code": "// Vòng phụ thuộc: ứng dụng không khởi động được từ Boot 2.6+\n@Service class A { A(B b) {} }\n@Service class B { B(A a) {} }\n\n// Cách đúng: tách logic dùng chung ra bean thứ ba\n@Service class Shared { }\n@Service class A { A(Shared s) {} }\n@Service class B { B(Shared s) {} }",
+		"tags": [
+			"circular-dependency",
+			"three-level-cache",
+			"lazy",
+			"refactoring"
+		],
+		"quiz": {
+			"options": [
+				"Spring giải được circular dependency cho constructor injection nhờ cache ba tầng",
+				"Spring giải được vòng phụ thuộc với setter injection, nhưng không giải được với constructor injection",
+				"Từ Spring Boot 2.6, circular dependency được cho phép mặc định",
+				"`@Lazy` là cách xử lý được khuyến nghị nhất cho circular dependency"
+			],
+			"correct": 1,
+			"explanation": "Constructor injection cần dependency hoàn chỉnh ngay lúc tạo nên không có điểm bắt đầu. Boot 2.6+ cấm mặc định, và `@Lazy` chỉ là giải pháp tạm — cách đúng là tái cấu trúc."
+		}
+	},
+	{
+		"id": "spring-core-005",
+		"topic": "spring-core",
+		"difficulty": "medium",
+		"question": "Spring AOP hoạt động thế nào? Nó khác AspectJ ở điểm nào?",
+		"answerShort": "Spring AOP dùng **proxy lúc runtime** (JDK dynamic proxy nếu có interface, CGLIB nếu không), chỉ chặn được lời gọi method public **từ bên ngoài** vào bean. AspectJ dệt mã lúc biên dịch/load, chặn được cả field và lời gọi nội bộ.",
+		"answerLong": "**Cơ chế của Spring AOP**: `BeanPostProcessor` bọc bean bằng proxy sau khi khởi tạo. Có hai loại proxy:\n\n- **JDK dynamic proxy** — khi bean implement interface; proxy implement cùng interface đó.\n- **CGLIB** — sinh subclass lúc runtime. Từ Spring Boot 2.0 đây là **mặc định** kể cả khi có interface (`proxyTargetClass = true`), để tránh lớp lỗi \"không ép kiểu proxy về class cụ thể được\".\n\n**Ba giới hạn quan trọng, đều bắt nguồn từ cơ chế proxy**:\n\n1. **Self-invocation không đi qua proxy**. `this.method()` bên trong cùng class gọi thẳng vào object gốc — mọi `@Transactional`, `@Cacheable`, `@Async` trên method đó **im lặng không có tác dụng**. Đây là bug được hỏi nhiều nhất trong phỏng vấn Spring.\n2. **Chỉ method `public`** được chặn (với CGLIB thì thêm `protected`). Method `private`, `static`, `final` không proxy được — CGLIB không override được `final`.\n3. Chỉ áp dụng cho bean **do Spring quản lý**.\n\n**Cách khắc phục self-invocation**: (a) tách method sang một bean khác — sạch nhất; (b) tự tiêm chính mình qua `@Lazy` hoặc `ObjectProvider`; (c) `AopContext.currentProxy()` (cần `exposeProxy = true`, xấu nhưng hiệu quả).\n\n**AspectJ**: dệt bytecode thật sự lúc biên dịch (CTW) hoặc lúc nạp class (LTW). Không có giới hạn nào ở trên, hiệu năng lúc chạy tốt hơn (không có tầng proxy), nhưng phải thêm compiler/agent vào pipeline build.\n\n**Từ vựng cần nhớ**: *Aspect* (module cắt ngang), *Join point* (điểm chèn — trong Spring AOP luôn là lời gọi method), *Pointcut* (biểu thức chọn join point), *Advice* (`@Before`, `@After`, `@AfterReturning`, `@AfterThrowing`, `@Around`).",
+		"code": "@Aspect @Component\npublic class TimingAspect {\n    @Around(\"@annotation(Timed)\")\n    public Object time(ProceedingJoinPoint pjp) throws Throwable {\n        long t0 = System.nanoTime();\n        try { return pjp.proceed(); }\n        finally { log.info(\"{} mất {}ms\", pjp.getSignature(), (System.nanoTime() - t0) / 1_000_000); }\n    }\n}\n\n// Self-invocation: @Transactional KHÔNG có tác dụng\n@Service class Svc {\n    public void outer() { this.inner(); }        // gọi thẳng, không qua proxy\n    @Transactional public void inner() { }\n}",
+		"tags": [
+			"aop",
+			"proxy",
+			"cglib",
+			"self-invocation"
+		],
+		"quiz": {
+			"options": [
+				"Spring AOP dệt bytecode lúc biên dịch giống AspectJ",
+				"Gọi method `@Transactional` từ một method khác trong cùng class vẫn kích hoạt được transaction",
+				"Spring AOP dùng proxy runtime nên self-invocation và method `private` không được chặn",
+				"CGLIB có thể proxy được cả method `final`"
+			],
+			"correct": 2,
+			"explanation": "Proxy chỉ chặn được lời gọi đi từ ngoài vào. CGLIB sinh subclass nên không override được method `final`, và Spring AOP không dệt bytecode như AspectJ."
+		}
+	},
+	{
+		"id": "spring-core-006",
+		"topic": "spring-core",
+		"difficulty": "medium",
+		"question": "`@Component`, `@Service`, `@Repository`, `@Controller` khác nhau thế nào?",
+		"answerShort": "Về kỹ thuật, cả bốn đều là `@Component` và đều được component scan nhặt vào. Khác biệt là **ngữ nghĩa**, trừ `@Repository` — nó thêm hành vi thật: dịch exception của nhà cung cấp sang `DataAccessException`.",
+		"answerLong": "**`@Component`** — stereotype gốc. Các annotation còn lại đều được meta-annotate bằng nó.\n\n**`@Service`** — tầng nghiệp vụ. Thuần tuý ngữ nghĩa; không thêm hành vi nào.\n\n**`@Repository`** — tầng truy cập dữ liệu. **Có hành vi thật**: `PersistenceExceptionTranslationPostProcessor` bọc bean bằng proxy dịch exception riêng của nhà cung cấp (Hibernate, JDBC) thành cây `DataAccessException` unchecked của Spring. Nhờ đó tầng nghiệp vụ không phụ thuộc vào công nghệ persistence cụ thể.\n\n**`@Controller`** — tầng web MVC; `DispatcherServlet` tìm handler dựa trên nó. `@RestController` = `@Controller` + `@ResponseBody`.\n\n**Vì sao vẫn nên dùng đúng stereotype dù phần lớn chỉ là ngữ nghĩa**:\n\n1. Code tự mô tả kiến trúc — đọc annotation là biết class thuộc tầng nào.\n2. Pointcut AOP nhắm được theo stereotype: `@within(org.springframework.stereotype.Service)`.\n3. Công cụ phân tích kiến trúc (ArchUnit, Spring Modulith) dựa vào chúng để kiểm tra ràng buộc tầng.\n4. `@Repository` thật sự thay đổi hành vi.\n\n**Phân biệt với `@Bean`**: stereotype dùng cho class **bạn viết** và được scan tự động. `@Bean` là method trong class `@Configuration`, dùng khi cần tạo bean từ class của **thư viện bên thứ ba** hoặc khi việc khởi tạo cần logic.",
+		"code": "@Repository\npublic class JdbcOrderRepository implements OrderRepository {\n    // SQLException của nhà cung cấp -> DataAccessException của Spring, tự động\n}\n\n// Class của thư viện bên ngoài -> dùng @Bean\n@Configuration\npublic class HttpConfig {\n    @Bean\n    RestClient restClient(RestClient.Builder builder) {\n        return builder.baseUrl(\"https://api.example.com\").build();\n    }\n}",
+		"tags": [
+			"stereotype",
+			"component-scan",
+			"repository",
+			"exception-translation"
+		],
+		"quiz": {
+			"options": [
+				"`@Repository` dịch exception của nhà cung cấp sang `DataAccessException`, còn `@Service` chỉ mang ý nghĩa ngữ nghĩa",
+				"`@Service` tự động thêm hành vi quản lý transaction cho bean",
+				"`@Component` không được component scan nhặt vào, phải khai báo thủ công",
+				"`@Controller` và `@RestController` hoàn toàn giống nhau"
+			],
+			"correct": 0,
+			"explanation": "`@Repository` là stereotype duy nhất thêm hành vi thật. `@Service` không tự thêm transaction, và `@RestController` bổ sung `@ResponseBody` cho mọi method."
+		}
+	},
+	{
+		"id": "spring-core-007",
+		"topic": "spring-core",
+		"difficulty": "hard",
+		"question": "`@Transactional` hoạt động thế nào? Các propagation và isolation level chính?",
+		"answerShort": "Proxy mở transaction trước method và commit/rollback sau. Mặc định chỉ rollback với **unchecked exception**. Propagation hay dùng: `REQUIRED` (mặc định), `REQUIRES_NEW`, `SUPPORTS`, `MANDATORY`, `NESTED`.",
+		"answerLong": "**Cơ chế**: `TransactionInterceptor` trong chuỗi proxy mở transaction (hoặc tham gia transaction đang có), gọi method, rồi commit — hoặc rollback nếu có exception.\n\n**Quy tắc rollback (nguồn bug số một)**: mặc định Spring chỉ rollback với `RuntimeException` và `Error`. **Checked exception KHÔNG rollback** — transaction vẫn commit bình thường. Muốn khác thì khai báo `@Transactional(rollbackFor = Exception.class)`.\n\n**Propagation**:\n\n| Giá trị | Hành vi |\n|---|---|\n| `REQUIRED` | mặc định — tham gia transaction hiện có, không có thì tạo mới |\n| `REQUIRES_NEW` | luôn tạo transaction mới, tạm ngưng cái đang chạy |\n| `SUPPORTS` | có thì tham gia, không có thì chạy không transaction |\n| `MANDATORY` | bắt buộc phải có sẵn, không thì ném exception |\n| `NEVER` | ném exception nếu đang có transaction |\n| `NOT_SUPPORTED` | tạm ngưng transaction hiện có |\n| `NESTED` | savepoint bên trong transaction hiện có (chỉ JDBC hỗ trợ) |\n\n**`REQUIRES_NEW` dùng khi nào**: ghi audit log hay bản ghi sự kiện phải tồn tại kể cả khi nghiệp vụ chính rollback. Lưu ý nó chiếm **một connection thứ hai** — lạm dụng sẽ làm cạn connection pool và có thể tự deadlock.\n\n**Isolation**: `READ_UNCOMMITTED` (đọc bẩn), `READ_COMMITTED` (mặc định của PostgreSQL/Oracle/SQL Server), `REPEATABLE_READ` (mặc định của MySQL InnoDB), `SERIALIZABLE`. `DEFAULT` nghĩa là theo cấu hình database.\n\n**Ba cái bẫy**:\n\n1. **Self-invocation** — gọi method `@Transactional` từ trong cùng class không qua proxy nên không có transaction.\n2. **Method `private`/`final`** không proxy được → annotation bị bỏ qua trong im lặng.\n3. **`readOnly = true`** không chỉ là gợi ý: Hibernate bỏ qua dirty checking và không giữ snapshot, tiết kiệm bộ nhớ đáng kể cho truy vấn lớn.",
+		"code": "@Service\npublic class OrderService {\n    @Transactional(rollbackFor = Exception.class, timeout = 10)\n    public void place(Order o) throws BusinessException {\n        repo.save(o);\n        audit.record(o);   // dùng REQUIRES_NEW -> vẫn ghi được dù cái này rollback\n    }\n\n    @Transactional(readOnly = true)\n    public List<Order> search(Criteria c) { return repo.find(c); }\n}\n\n@Service\npublic class AuditService {\n    @Transactional(propagation = Propagation.REQUIRES_NEW)\n    public void record(Order o) { auditRepo.save(new AuditEntry(o)); }\n}",
+		"tags": [
+			"transactional",
+			"propagation",
+			"isolation",
+			"rollback"
+		],
+		"quiz": {
+			"options": [
+				"Mặc định `@Transactional` rollback với mọi loại exception, kể cả checked",
+				"`REQUIRES_NEW` tái sử dụng chính connection của transaction đang chạy",
+				"`@Transactional` trên method `private` vẫn hoạt động bình thường",
+				"Mặc định chỉ unchecked exception mới gây rollback; checked exception vẫn để transaction commit"
+			],
+			"correct": 3,
+			"explanation": "Đây là nguồn bug phổ biến nhất với `@Transactional` — phải khai báo `rollbackFor` cho checked exception. `REQUIRES_NEW` chiếm connection thứ hai, và method `private` không proxy được."
+		}
+	},
+	{
+		"id": "spring-core-008",
+		"topic": "spring-core",
+		"difficulty": "medium",
+		"question": "Khi có nhiều bean cùng kiểu, Spring chọn bean nào? `@Primary` và `@Qualifier` khác nhau ra sao?",
+		"answerShort": "Spring khớp theo kiểu trước; nhiều ứng viên thì ném `NoUniqueBeanDefinitionException`. `@Primary` đặt bean mặc định cho toàn ứng dụng; `@Qualifier` chỉ đích danh tại từng điểm tiêm và **thắng** `@Primary`.",
+		"answerLong": "**Thứ tự phân giải của Spring**:\n\n1. Khớp theo **kiểu**.\n2. Một ứng viên → dùng luôn.\n3. Nhiều ứng viên → lọc bằng `@Qualifier` nếu có tại điểm tiêm.\n4. Không có qualifier → tìm bean đánh `@Primary`.\n5. Vẫn nhiều → so khớp **tên biến/tham số** với tên bean (dự phòng cuối, phụ thuộc vào việc giữ tên tham số khi biên dịch).\n6. Thất bại → `NoUniqueBeanDefinitionException`.\n\n**`@Primary`** — đặt trên định nghĩa bean, nghĩa là \"mặc định khi không nói gì khác\". Phù hợp khi có một implementation dùng trong 90% trường hợp.\n\n**`@Qualifier(\"name\")`** — đặt tại **điểm tiêm**, chỉ đích danh. Ưu tiên cao hơn `@Primary`.\n\n**Custom qualifier annotation** là cách sạch nhất: tạo annotation riêng meta-annotate bằng `@Qualifier`. Nó an toàn kiểu, refactor được, và không dùng chuỗi ma thuật.\n\n**Tiêm tất cả implementation**: khai báo `List<T>` hoặc `Map<String, T>` — Spring tiêm mọi bean cùng kiểu (với `Map` thì key là tên bean). Rất hợp cho strategy pattern. Thứ tự trong `List` điều khiển bằng `@Order` hoặc `Ordered`.\n\n**Tránh dùng tên biến để phân giải**: nó khiến việc đổi tên tham số trở thành thay đổi phá vỡ, và cần cờ `-parameters` lúc biên dịch (Spring Boot bật sẵn, nhưng dự án khác thì chưa chắc).",
+		"code": "@Qualifier @Retention(RUNTIME) @interface Fast {}\n\n@Component @Fast class FastParser implements Parser {}\n@Component @Primary class DefaultParser implements Parser {}\n\n@Service\nclass Svc {\n    Svc(@Fast Parser parser) {}            // @Qualifier thắng @Primary\n}\n\n// Strategy pattern: tiêm tất cả implementation\n@Service\nclass Router {\n    private final Map<String, Handler> handlers;   // key = tên bean\n    Router(Map<String, Handler> handlers) { this.handlers = handlers; }\n}",
+		"tags": [
+			"qualifier",
+			"primary",
+			"autowire",
+			"strategy"
+		],
+		"quiz": {
+			"options": [
+				"`@Primary` có ưu tiên cao hơn `@Qualifier` tại điểm tiêm",
+				"`@Qualifier` tại điểm tiêm thắng `@Primary`; tiêm `List<T>` sẽ nhận toàn bộ bean cùng kiểu",
+				"Khi có nhiều bean cùng kiểu, Spring luôn chọn bean được đăng ký đầu tiên",
+				"Không thể tiêm nhiều implementation của cùng một interface vào một bean"
+			],
+			"correct": 1,
+			"explanation": "`@Qualifier` cụ thể hơn nên thắng `@Primary`. Tiêm `List<T>` hoặc `Map<String,T>` là cách chuẩn để hiện thực strategy pattern trong Spring."
+		}
+	},
+	{
+		"id": "spring-core-009",
+		"topic": "spring-core",
+		"difficulty": "medium",
+		"question": "`ApplicationEvent` trong Spring dùng làm gì? `@EventListener` khác `@TransactionalEventListener` thế nào?",
+		"answerShort": "Event giúp giảm phụ thuộc giữa các component: bên phát không cần biết bên nhận. `@EventListener` chạy **đồng bộ** ngay khi publish; `@TransactionalEventListener` hoãn tới một pha của transaction, mặc định là `AFTER_COMMIT`.",
+		"answerLong": "**Vấn đề nó giải quyết**: `OrderService` cần gửi email, cập nhật kho, ghi analytics. Tiêm thẳng ba service vào tạo ra coupling chặt và làm class phình theo mỗi yêu cầu mới. Với event, `OrderService` chỉ publish `OrderPlacedEvent` và không biết gì về bên nhận.\n\n**Cách dùng**: từ Spring 4.2, event là POJO bất kỳ (không cần kế thừa `ApplicationEvent`). Publish bằng `ApplicationEventPublisher`, nhận bằng `@EventListener`.\n\n**Mặc định là đồng bộ** — listener chạy trên **cùng thread** và **cùng transaction** với bên publish. Điều này hay bị hiểu nhầm: event **không** tự động làm cho việc xử lý trở thành bất đồng bộ. Listener ném exception sẽ lan ngược lên bên publish và làm rollback transaction.\n\n**`@Async` + `@EventListener`** cho xử lý bất đồng bộ. Nhưng khi đó listener chạy trên thread khác nên **không nằm trong transaction** của bên publish, và exception của nó không lan về bên publish nữa.\n\n**`@TransactionalEventListener`** — giải quyết bài toán kinh điển \"gửi email khi đơn hàng được lưu\". Nếu gửi email trong `@EventListener` thường, email vẫn bay đi kể cả khi transaction rollback sau đó. Các pha:\n\n- `AFTER_COMMIT` (mặc định) — chỉ chạy khi commit thành công.\n- `AFTER_ROLLBACK`, `AFTER_COMPLETION`, `BEFORE_COMMIT`.\n\n**Lưu ý quan trọng**: mặc định, ghi database bên trong listener `AFTER_COMMIT` sẽ **không được commit**, vì transaction đã kết thúc. Cần `@Transactional(propagation = REQUIRES_NEW)` trên listener.\n\n**Khi nào không dùng event**: khi luồng nghiệp vụ là tuần tự và bắt buộc. Event làm luồng khó lần theo; lạm dụng biến codebase thành mê cung.",
+		"code": "record OrderPlacedEvent(String orderId, BigDecimal total) {}\n\n@Service\nclass OrderService {\n    private final ApplicationEventPublisher events;\n\n    @Transactional\n    public void place(Order o) {\n        repo.save(o);\n        events.publishEvent(new OrderPlacedEvent(o.id(), o.total()));\n    }\n}\n\n@Component\nclass EmailListener {\n    @Async\n    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)\n    void onPlaced(OrderPlacedEvent e) { mailer.sendConfirmation(e.orderId()); }\n}",
+		"tags": [
+			"application-event",
+			"eventlistener",
+			"transactional-event",
+			"decoupling"
+		],
+		"quiz": {
+			"options": [
+				"`@EventListener` mặc định chạy bất đồng bộ trên thread pool riêng",
+				"`@EventListener` mặc định chạy đồng bộ cùng transaction; `@TransactionalEventListener` mới hoãn tới sau khi commit",
+				"Exception trong `@EventListener` đồng bộ không bao giờ ảnh hưởng tới bên publish",
+				"`@TransactionalEventListener` mặc định chạy ở pha `BEFORE_COMMIT`"
+			],
+			"correct": 1,
+			"explanation": "Event trong Spring mặc định là đồng bộ — muốn bất đồng bộ phải thêm `@Async`. Pha mặc định của `@TransactionalEventListener` là `AFTER_COMMIT`."
+		}
+	},
+	{
+		"id": "spring-core-010",
+		"topic": "spring-core",
+		"difficulty": "easy",
+		"question": "`@Configuration` và `@Bean` dùng thế nào? Vì sao `@Configuration` cần proxy CGLIB?",
+		"answerShort": "`@Configuration` đánh dấu class định nghĩa bean bằng method `@Bean`. Spring proxy class này bằng CGLIB để gọi method `@Bean` từ bên trong vẫn trả về **cùng một** bean singleton, thay vì tạo instance mới.",
+		"answerLong": "**`@Bean`** — method trả về object sẽ được đăng ký làm bean. Tên bean mặc định là tên method. Dùng khi: class thuộc thư viện bên thứ ba (không thêm annotation vào được), hoặc việc khởi tạo cần logic điều kiện.\n\n**Chế độ full (`@Configuration`)** — Spring bọc class bằng proxy CGLIB. Mỗi lời gọi method `@Bean` từ bên trong class được chặn lại: nếu bean đã tồn tại trong container thì trả về nó, không chạy lại method. Nhờ vậy semantics singleton được giữ đúng ngay cả khi các method `@Bean` gọi lẫn nhau.\n\n**Chế độ lite** — method `@Bean` nằm trong class chỉ đánh `@Component` (hoặc không đánh gì). **Không có proxy**: mỗi lần gọi trực tiếp là một object mới. Nhanh hơn một chút, nhưng dễ tạo bug tinh vi — cùng một \"bean\" tồn tại nhiều bản, và bug này rất khó thấy.\n\n`@Configuration(proxyBeanMethods = false)` tắt proxy có chủ đích. Hợp lệ khi các method `@Bean` không gọi nhau — Spring Boot dùng cách này rộng rãi trong các lớp auto-configuration để rút ngắn thời gian khởi động. Khi tắt, hãy nhận dependency qua **tham số method** thay vì gọi method khác.\n\n**Cách nhận dependency đúng**: khai báo làm tham số của method `@Bean`. Spring tự phân giải, và cách này hoạt động đúng ở cả hai chế độ.",
+		"code": "@Configuration\npublic class AppConfig {\n    @Bean DataSource dataSource() { return new HikariDataSource(config()); }\n\n    @Bean JdbcTemplate jdbcTemplate() {\n        return new JdbcTemplate(dataSource());   // CGLIB chặn -> vẫn là cùng một DataSource\n    }\n}\n\n// Tắt proxy: nhận dependency qua tham số, không gọi method\n@Configuration(proxyBeanMethods = false)\npublic class FastConfig {\n    @Bean JdbcTemplate jdbcTemplate(DataSource ds) { return new JdbcTemplate(ds); }\n}",
+		"tags": [
+			"configuration",
+			"bean",
+			"cglib",
+			"proxybeanmethods"
+		],
+		"quiz": {
+			"options": [
+				"Proxy CGLIB khiến lời gọi method `@Bean` từ bên trong `@Configuration` trả về cùng một bean singleton",
+				"Method `@Bean` trong class `@Component` vẫn được proxy như trong `@Configuration`",
+				"`proxyBeanMethods = false` làm tăng thời gian khởi động ứng dụng",
+				"Tên bean mặc định của method `@Bean` là tên kiểu trả về"
+			],
+			"correct": 0,
+			"explanation": "Đây chính là khác biệt giữa chế độ full và lite. Class `@Component` chạy ở chế độ lite (không proxy), tắt proxy giúp khởi động **nhanh** hơn, và tên bean mặc định là tên method."
+		}
+	},
+	{
+		"id": "spring-core-011",
+		"topic": "spring-core",
+		"difficulty": "medium",
+		"question": "`@Async` hoạt động thế nào? Những cái bẫy thường gặp?",
+		"answerShort": "`@Async` khiến method chạy trên thread khác qua proxy, trả về `void`, `Future` hoặc `CompletableFuture`. Bẫy: quên `@EnableAsync`, self-invocation, executor mặc định không giới hạn, exception bị nuốt, và mất `SecurityContext`/`ThreadLocal`.",
+		"answerLong": "**Cách hoạt động**: `AsyncAnnotationBeanPostProcessor` bọc bean bằng proxy; lời gọi method được submit vào một `TaskExecutor` và trả về ngay.\n\n**Năm cái bẫy**:\n\n1. **Quên `@EnableAsync`** — annotation bị bỏ qua hoàn toàn, method chạy đồng bộ mà không có cảnh báo nào.\n2. **Self-invocation** — như mọi cơ chế dựa trên proxy: gọi từ trong cùng class thì không có hiệu lực.\n3. **Executor mặc định** — Spring Boot 3 mặc định dùng `SimpleAsyncTaskExecutor`, vốn **tạo thread mới cho mỗi task** và không tái sử dụng. Dưới tải cao điều này làm cạn kiệt thread. Luôn khai báo executor riêng có chặn kích thước hàng đợi. (Boot 3.2+ có thể chuyển sang virtual thread bằng `spring.threads.virtual.enabled=true`.)\n4. **Exception bị nuốt** — với method trả `void`, exception không có đường nào về caller. Cần `AsyncUncaughtExceptionHandler`. Với `CompletableFuture` thì exception nằm trong future và caller thấy được.\n5. **Mất context** — `SecurityContext`, `MDC` của logging, `RequestContextHolder` đều dựa trên `ThreadLocal` nên không tự truyền sang thread mới. Dùng `DelegatingSecurityContextAsyncTaskExecutor` hoặc `TaskDecorator` để chuyển tiếp.\n\n**Kiểu trả về**: `void` (fire-and-forget), `Future<T>`, `CompletableFuture<T>` (nên dùng — kết hợp được), `ListenableFuture` (đã deprecated).\n\n**Lưu ý về transaction**: method `@Async` chạy trên thread khác nên **không** kế thừa transaction của caller. Nó cần `@Transactional` riêng nếu muốn có transaction.",
+		"code": "@Configuration @EnableAsync\npublic class AsyncConfig implements AsyncConfigurer {\n    @Override public Executor getAsyncExecutor() {\n        var ex = new ThreadPoolTaskExecutor();\n        ex.setCorePoolSize(8);\n        ex.setMaxPoolSize(32);\n        ex.setQueueCapacity(500);              // CÓ chặn -> có backpressure\n        ex.setThreadNamePrefix(\"async-\");\n        ex.setTaskDecorator(new MdcTaskDecorator());  // chuyển tiếp MDC sang thread mới\n        ex.initialize();\n        return ex;\n    }\n\n    @Override public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {\n        return (ex, method, params) -> log.error(\"Lỗi async ở {}\", method, ex);\n    }\n}",
+		"tags": [
+			"async",
+			"taskexecutor",
+			"threadlocal",
+			"exception-handling"
+		],
+		"quiz": {
+			"options": [
+				"Method `@Async` kế thừa transaction của caller vì cùng chung ngữ cảnh Spring",
+				"Exception trong method `@Async` trả về `void` sẽ tự động lan về caller",
+				"`SecurityContext` và MDC dựa trên `ThreadLocal` nên không tự truyền sang thread của `@Async`",
+				"Chỉ cần đánh `@Async` là đủ, không cần `@EnableAsync`"
+			],
+			"correct": 2,
+			"explanation": "Thread mới có `ThreadLocal` riêng nên phải dùng `TaskDecorator` hoặc executor uỷ nhiệm. Method `@Async` chạy trên thread khác nên không kế thừa transaction, và thiếu `@EnableAsync` thì annotation bị bỏ qua."
+		}
+	}
+]
