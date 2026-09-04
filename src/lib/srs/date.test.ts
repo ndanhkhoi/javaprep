@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, daysBetween, formatInterval, fromIsoDate, toIsoDate, todayLocal } from './date';
+import {
+	addDays,
+	daysBetween,
+	formatInterval,
+	formatIsoDate,
+	fromIsoDate,
+	toIsoDate,
+	todayLocal
+} from './date';
 
 describe('toIsoDate', () => {
 	it('dùng các trường local, không phải UTC', () => {
@@ -82,5 +90,24 @@ describe('formatInterval', () => {
 		[365, '1 năm']
 	])('%i ngày -> %s', (days, expected) => {
 		expect(formatInterval(days)).toBe(expected);
+	});
+});
+
+describe('formatIsoDate', () => {
+	it('đọc ra ngày và tháng thay vì chuỗi ISO', () => {
+		const label = formatIsoDate('2026-09-19');
+		expect(label).not.toBe('2026-09-19');
+		expect(label).toContain('19');
+		expect(label).toContain('9');
+	});
+
+	it('thêm thứ khi được yêu cầu', () => {
+		const plain = formatIsoDate('2026-09-19');
+		const withWeekday = formatIsoDate('2026-09-19', { weekday: true });
+		expect(withWeekday.length).toBeGreaterThan(plain.length);
+	});
+
+	it('trả lại chuỗi ISO khi ngày không hợp lệ', () => {
+		expect(formatIsoDate('không-phải-ngày')).toBe('không-phải-ngày');
 	});
 });

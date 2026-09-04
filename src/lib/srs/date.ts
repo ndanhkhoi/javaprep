@@ -54,3 +54,23 @@ export function formatInterval(days: number): string {
 	const y = Math.round((days / 365) * 10) / 10;
 	return `${y} năm`;
 }
+
+/**
+ * Ngày dạng người đọc: `2026-09-19` -> "19 tháng 9". Hiện chuỗi ISO thẳng ra giao diện
+ * là bắt người dùng tự dịch định dạng của máy, nên mọi ngày xuất hiện trước mắt người
+ * dùng đều đi qua đây. Bật `weekday` khi cần định vị trong tuần (lời chào trang chủ).
+ *
+ * `Intl` không có ở mọi runtime cũ và có thể ném khi locale lạ — hỏng thì trả lại chính
+ * chuỗi ISO, vẫn đọc được chứ không thành chỗ trống.
+ */
+export function formatIsoDate(iso: IsoDate, { weekday = false } = {}): string {
+	try {
+		return new Intl.DateTimeFormat('vi-VN', {
+			weekday: weekday ? 'long' : undefined,
+			day: 'numeric',
+			month: 'long'
+		}).format(fromIsoDate(iso));
+	} catch {
+		return iso;
+	}
+}
