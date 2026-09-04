@@ -1,19 +1,19 @@
 <script lang="ts">
+	import Icon from './ui/Icon.svelte';
+	import Button from './ui/Button.svelte';
+
 	let { onReload }: { onReload: () => void } = $props();
 </script>
 
 <div
-	class="fixed inset-x-3 bottom-20 z-50 mx-auto flex max-w-md items-center gap-3 rounded-xl
-	       border border-border bg-surface-2 p-3 shadow-lg"
+	class="animate-pop surface-panel fixed inset-x-3 bottom-24 z-50 mx-auto flex max-w-md items-center
+	       gap-3 rounded-xl p-3 lg:bottom-6"
 	role="status"
 	aria-live="polite"
 >
-	<p class="flex-1 text-sm">Đã có phiên bản mới của JavaPrep.</p>
-	<button
-		type="button"
-		class="min-h-11 rounded-lg bg-brand px-4 text-sm font-semibold text-brand-ink"
-		onclick={onReload}
-	>
-		Tải lại
-	</button>
+	<span class="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
+		<Icon name="refresh" size={18} strokeWidth={2} />
+	</span>
+	<p class="flex-1 text-sm font-medium leading-snug">Đã có phiên bản mới của JavaPrep.</p>
+	<Button size="sm" onclick={onReload}>Tải lại</Button>
 </div>

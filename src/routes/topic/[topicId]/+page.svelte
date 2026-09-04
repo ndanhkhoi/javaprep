@@ -1,8 +1,14 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import QuestionListItem from '$lib/components/QuestionListItem.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+	import FilterChip from '$lib/components/ui/FilterChip.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
+	import ProgressBar from '$lib/components/ProgressBar.svelte';
 	import { masteryLevel, type MasteryLevel } from '$lib/srs/sm2';
+	import { masteryOf } from '$lib/stats/mastery';
 	import { progress } from '$lib/stores/progress.svelte';
+	import { accentStyle } from '$lib/theme/topic-accent';
 	import type { Difficulty } from '$lib/types';
 
 	let { data } = $props();
@@ -10,16 +16,18 @@
 	let difficulty = $state<Difficulty | null>(null);
 	let status = $state<MasteryLevel | null>(null);
 
-	const difficulties: { value: Difficulty; label: string }[] = [
+	const DIFFICULTIES: { value: Difficulty; label: string }[] = [
 		{ value: 'easy', label: 'Dễ' },
 		{ value: 'medium', label: 'Vừa' },
 		{ value: 'hard', label: 'Khó' }
 	];
-	const statuses: { value: MasteryLevel; label: string }[] = [
+	const STATUSES: { value: MasteryLevel; label: string }[] = [
 		{ value: 'new', label: 'Chưa học' },
 		{ value: 'learning', label: 'Đang học' },
 		{ value: 'mature', label: 'Đã thuộc' }
 	];
+
+	const mastery = $derived(masteryOf(data.questions, progress.cards));
 
 	const rows = $derived(
 		data.questions
@@ -27,65 +35,138 @@
 			.filter((r) => !difficulty || r.question.difficulty === difficulty)
 			.filter((r) => !status || r.level === status)
 	);
+
+	const hasFilter = $derived(difficulty !== null || status !== null);
+
+	function clearFilters(): void {
+		difficulty = null;
+		status = null;
+	}
 </script>
 
 <svelte:head>
 	<title>{data.topic.name} — JavaPrep</title>
 </svelte:head>
 
-<header class="mb-3">
-	<a href="{base}/" class="text-xs text-ink-muted">← Chủ đề</a>
-	<h1 class="mt-1 flex items-center gap-2 text-lg font-bold">
-		<span aria-hidden="true">{data.topic.icon}</span>
-		{data.topic.name}
-	</h1>
-	<p class="text-xs text-ink-muted">{data.questions.length} câu · {data.topic.blurb}</p>
-</header>
+<div class="accent mx-auto max-w-4xl" style={accentStyle(data.topic.id)}>
+	<a
+		href="{base}/"
+		class="mb-3 inline-flex min-h-8 items-center gap-1 text-xs font-medium text-ink-muted
+		       transition-colors hover:text-ink"
+	>
+		<Icon name="chevronLeft" size={14} />
+		Chủ đề
+	</a>
 
-<div class="mb-3 flex flex-wrap gap-1.5">
-	{#each difficulties as d (d.value)}
-		<button
-			type="button"
-			class="min-h-9 rounded-full border px-3 text-xs font-medium
-			       {difficulty === d.value
-				? 'border-brand bg-brand text-brand-ink'
-				: 'border-border text-ink-muted'}"
-			aria-pressed={difficulty === d.value}
-			onclick={() => (difficulty = difficulty === d.value ? null : d.value)}
+	<!-- Đầu trang mang hue của chủ đề: người dùng biết mình đang ở đâu trong 11 chủ đề
+	     mà không cần đọc lại tiêu đề. -->
+	<header class="surface-panel relative mb-5 overflow-hidden rounded-2xl p-5 sm:p-6">
+		<span
+			class="pointer-events-none absolute -right-16 -top-20 size-56 rounded-full
+			       bg-[var(--accent)] opacity-[0.13] blur-3xl"
+			aria-hidden="true"
+		></span>
+
+		<div class="flex items-start gap-4">
+			<span
+				class="grid size-14 shrink-0 place-items-center rounded-2xl bg-[var(--accent-soft)]
+				       text-2xl leading-none"
+				aria-hidden="true"
+			>
+				{data.topic.icon}
+			</span>
+			<div class="min-w-0 flex-1">
+				<h1 class="text-title font-extrabold">{data.topic.name}</h1>
+				<p class="mt-1.5 text-sm leading-relaxed text-ink-muted">{data.topic.blurb}</p>
+			</div>
+		</div>
+
+		<div class="mt-5 space-y-2">
+			<ProgressBar
+				tone="accent"
+				value={mastery.mature}
+				max={mastery.total}
+				label="{data.topic.name}: {mastery.mature} trên {mastery.total} câu đã thuộc"
+			/>
+			<p class="flex flex-wrap gap-x-3 text-2xs tabular-nums text-ink-muted">
+				<span>{mastery.total} câu</span>
+				<span class="text-ok">{mastery.mature} đã thuộc</span>
+				<span class="text-warn">{mastery.learning} đang học</span>
+				<span>{mastery.new} chưa học</span>
+			</p>
+		</div>
+	</header>
+
+	<section class="mb-4">
+		<div class="mb-2.5 flex items-baseline justify-between gap-3">
+			<h2 class="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-[0.13em] text-ink-muted">
+				<Icon name="filter" size={13} />
+				Lọc
+			</h2>
+			{#if hasFilter}
+				<button
+					type="button"
+					class="min-h-8 text-2xs font-semibold text-brand hover:underline"
+					onclick={clearFilters}
+				>
+					Bỏ lọc
+				</button>
+			{/if}
+		</div>
+
+		<div class="flex flex-wrap items-center gap-2">
+			{#each DIFFICULTIES as d (d.value)}
+				<FilterChip
+					active={difficulty === d.value}
+					onToggle={() => (difficulty = difficulty === d.value ? null : d.value)}
+				>
+					{d.label}
+				</FilterChip>
+			{/each}
+			<span class="mx-1 h-6 w-px bg-border" aria-hidden="true"></span>
+			{#each STATUSES as s (s.value)}
+				<FilterChip
+					active={status === s.value}
+					onToggle={() => (status = status === s.value ? null : s.value)}
+				>
+					{s.label}
+				</FilterChip>
+			{/each}
+		</div>
+	</section>
+
+	{#if rows.length === 0}
+		<div class="surface-card rounded-xl py-12 text-center">
+			<p class="text-sm font-medium">Không có câu nào khớp bộ lọc.</p>
+			<button
+				type="button"
+				class="mt-2 min-h-9 text-xs font-semibold text-brand hover:underline"
+				onclick={clearFilters}
+			>
+				Bỏ lọc để xem tất cả
+			</button>
+		</div>
+	{:else}
+		<ul class="space-y-2" aria-label="Danh sách câu hỏi">
+			{#each rows as row (row.question.id)}
+				<li><QuestionListItem question={row.question} level={row.level} /></li>
+			{/each}
+		</ul>
+	{/if}
+
+	<div class="mt-6 flex flex-col gap-2.5 sm:flex-row">
+		<Button href="{base}/study?topic={data.topic.id}" size="lg" class="flex-1">
+			<Icon name="cards" size={18} strokeWidth={2} />
+			Ôn chủ đề này
+		</Button>
+		<Button
+			href="{base}/quiz/play?count=10&topic={data.topic.id}"
+			variant="secondary"
+			size="lg"
+			class="flex-1"
 		>
-			{d.label}
-		</button>
-	{/each}
-	<span class="w-px self-stretch bg-border" aria-hidden="true"></span>
-	{#each statuses as s (s.value)}
-		<button
-			type="button"
-			class="min-h-9 rounded-full border px-3 text-xs font-medium
-			       {status === s.value
-				? 'border-brand bg-brand text-brand-ink'
-				: 'border-border text-ink-muted'}"
-			aria-pressed={status === s.value}
-			onclick={() => (status = status === s.value ? null : s.value)}
-		>
-			{s.label}
-		</button>
-	{/each}
+			<Icon name="quiz" size={18} />
+			Quiz 10 câu
+		</Button>
+	</div>
 </div>
-
-{#if rows.length === 0}
-	<p class="py-8 text-center text-sm text-ink-muted">Không có câu nào khớp bộ lọc.</p>
-{:else}
-	<ul aria-label="Danh sách câu hỏi">
-		{#each rows as row (row.question.id)}
-			<li><QuestionListItem question={row.question} level={row.level} /></li>
-		{/each}
-	</ul>
-{/if}
-
-<a
-	href="{base}/study?topic={data.topic.id}"
-	class="mt-5 flex min-h-12 items-center justify-center rounded-xl border border-brand
-	       px-4 text-sm font-semibold text-brand"
->
-	Ôn chủ đề này
-</a>
