@@ -13,15 +13,19 @@
 
 <!-- Dock nổi thay vì thanh dán đáy: nội dung nhìn thấy được ở cả hai bên nên thanh
      đọc ra như một lớp riêng phía trên trang, không phải phần bị cắt của trang. -->
+<!-- Safe area xử lý bằng padding của `nav`, không phải margin của `ul`: đặt
+     `margin-inline` lên `ul` sẽ ghi đè `mx-auto`, và ở khoảng 768–1023px (dock rộng
+     448px trên màn 834px) dock bị dán sang lề trái thay vì nằm giữa. -->
 <nav
 	class="fixed inset-x-0 bottom-0 z-40 lg:hidden"
-	style="padding-bottom: max(0.6rem, env(safe-area-inset-bottom))"
+	style="padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+	       padding-left: max(0.75rem, env(safe-area-inset-left));
+	       padding-right: max(0.75rem, env(safe-area-inset-right))"
 	aria-label="Điều hướng chính"
 >
 	<ul
 		class="surface-glass relative mx-auto flex max-w-md items-stretch gap-1 rounded-2xl border
 		       p-1.5 shadow-3"
-		style="margin-inline: max(0.75rem, env(safe-area-inset-left))"
 	>
 		{#if activeIndex >= 0}
 			<!-- Con trỏ trượt giữa các mục: một phần tử di chuyển, không phải 4 phần tử đổi nền. -->
