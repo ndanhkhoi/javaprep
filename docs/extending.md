@@ -44,10 +44,74 @@ Nếu đổi **số lượng** câu trong một chủ đề, cập nhật bảng
 1. Thêm một mục vào `src/lib/data/topics.json` (`id` kebab-case, `icon` là emoji, `blurb` một dòng, `order` chưa bị dùng).
 2. Tạo `src/lib/data/topics/<id>.json`.
 3. Import và nối vào mảng trong `src/lib/data/authored.ts`.
-4. Thêm số lượng câu vào `EXPECTED_PER_TOPIC` trong `scripts/validate-content.ts`.
-5. `npm run validate:content && npm run build`.
+4. Thêm một góc hue vào `HUE_BY_TOPIC` trong `src/lib/theme/topic-accent.ts` — chọn số cách các hue đang có tối thiểu ~25 độ. Bỏ bước này thì chủ đề vẫn hiển thị đúng, chỉ dùng màu brand mặc định.
+5. Thêm số lượng câu vào `EXPECTED_PER_TOPIC` trong `scripts/validate-content.ts`.
+6. `npm run validate:content && npm run verify`.
 
 Trang topic và trang chi tiết tự sinh từ dữ liệu — không cần thêm route.
+
+## Sửa giao diện
+
+### Design token
+
+Tất cả nằm trong `src/app.css`. Không hardcode màu, bo góc, bóng hay thời lượng ở component — sửa token là đổi cả app.
+
+| Nhóm | Token | Ghi chú |
+|---|---|---|
+| Bề mặt | `--color-surface`, `-2`, `-3`, `-4`, `--color-elevated` | Thang 4 bậc; `elevated` cho phần tử nổi khỏi mặt phẳng |
+| Chữ | `--color-ink`, `--color-ink-muted`, `--color-ink-subtle` | Ba bậc, để không phải hạ opacity (opacity làm chữ mờ, không chỉ nhạt) |
+| Trạng thái | `--color-ok/warn/bad` + `-soft` + `-solid` | Bản gốc an toàn cho **chữ**, `-soft` cho **nền**, `-solid` cho **khối đặc** |
+| Chiều sâu | `--shadow-1..3`, `--shadow-glow`, `--edge` | `.dark` định nghĩa lại cả thang bóng và `--edge` |
+| Bo góc | `--radius-sm..3xl` | `xl` cho card, `2xl` cho panel lớn |
+| Cỡ chữ | `--text-2xs`, `--text-heading/title/display` | Ba cỡ lớn dùng `clamp()` nên không cần breakpoint |
+| Chuyển động | `--dur-fast/--dur/--dur-slow`, `--ease-out-quart/spring/soft` | Mọi transition dùng ba mốc này |
+
+Mỗi giá trị trong `@theme` phải được định nghĩa lại trong khối `.dark` nếu dark mode cần khác.
+
+### Quy tắc đặt tên class tự viết
+
+**Không đặt tên class trùng tiền tố của bất kỳ utility Tailwind nào** (`bg-`, `text-`, `inline-`, `w-`, `max-w-`, `animate-`…). Layer `utilities` thắng layer `components` nên class của bạn sẽ bị ghi đè âm thầm — không lỗi build, không cảnh báo. Xem [`decisions.md`](decisions.md) cho hai lần việc này đã xảy ra.
+
+Cách kiểm tra sau khi thêm một class vào `@layer components`: chạy `npm run build`, rồi tìm tên class đó trong CSS đã sinh ra dưới `_app/immutable/assets/` — kết quả phải chỉ chứa đúng những declaration mình viết. Nếu thấy thêm một rule lạ (ví dụ `inline-size`, `background-color` mà mình không khai) thì tên class đang trùng utility.
+
+### Thêm icon
+
+`src/lib/components/ui/icons.ts` là một map `tên → path`, vẽ trên khung `24x24`, chỉ dùng stroke (`fill="none"`) và không đặt `stroke-width` riêng — `Icon.svelte` truyền giá trị đó vào. Thêm một entry là dùng được ngay kèm type-safety, vì `IconName` suy ra từ chính map đó.
+
+### Sinh lại icon app
+
+Nguồn là `scripts/icons/mark.svg` (bản thường) và `scripts/icons/mark-maskable.svg` (nền tràn viền, hình nằm trong vùng an toàn 80% vì hệ điều hành sẽ cắt theo hình dạng riêng). Cần `rsvg-convert` (`brew install librsvg`):
+
+```bash
+cp scripts/icons/mark.svg static/icons/favicon.svg
+rsvg-convert -w 192 -h 192 scripts/icons/mark.svg -o static/icons/icon-192.png
+rsvg-convert -w 512 -h 512 scripts/icons/mark.svg -o static/icons/icon-512.png
+rsvg-convert -w 512 -h 512 scripts/icons/mark-maskable.svg -o static/icons/icon-maskable-512.png
+```
+
+Đổi màu brand thì nhớ cập nhật cả `theme_color` trong `static/manifest.webmanifest` và hai thẻ `theme-color` trong `src/app.html`.
+
+### Thay font
+
+Font nằm trong `src/lib/assets/fonts/` và được khai báo bằng `@font-face` ở đầu `src/app.css`. Đặt trong `src/` (không phải `static/`) là có chủ đích: Vite gắn hash và tự viết lại URL theo `paths.base`, nên deploy ở subpath vẫn đúng.
+
+Lấy subset mới từ Google Fonts bằng cách đọc CSS của họ để lần ra URL woff2 theo từng subset, rồi tải về `src/lib/assets/fonts/`:
+
+```bash
+curl -sA "Mozilla/5.0" "https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap"
+```
+
+Nhớ copy cả `unicode-range` tương ứng vào `@font-face` — thiếu nó thì trình duyệt tải mọi subset thay vì chỉ subset cần dùng. Tiếng Việt cần đúng hai subset: `latin` + `vietnamese`.
+
+### Breakpoint của app shell
+
+Sidebar bật ở `lg` (1024px), dock đáy hiện dưới `lg`. Hai thứ này phải đổi cùng nhau, ở bốn chỗ: `SideNav.svelte` (`lg:flex`), `BottomDock.svelte` (`lg:hidden`), `TopBar.svelte` (các `lg:` cho nhãn brand và ô tìm kiếm), và `+layout.svelte` (`lg:pl-60`, `lg:pb-14`). Trang phiên ôn và quiz cũng dùng `lg:` để căn giữa dọc — việc đó chỉ đúng khi dock đã biến mất.
+
+Đừng hạ xuống `md`: xem [`decisions.md`](decisions.md) cho số đo cụ thể.
+
+### Kiểm tra tràn ngang
+
+`body` có `overflow-x: hidden` nên tràn ngang **không** tạo scrollbar — nó bị cắt âm thầm và chỉ lộ ra ở chỗ chữ đè lên nhau hoặc chạy khỏi thẻ. Cách phát hiện đáng tin: mở từng route ở khổ 390px và so `document.documentElement.scrollWidth` với `clientWidth`; bằng nhau là sạch.
 
 ## Chỉnh thuật toán ôn tập
 

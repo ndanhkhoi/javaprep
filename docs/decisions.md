@@ -60,9 +60,11 @@ Cache name gắn với `version`, nên mỗi lần deploy tự dọn sạch cach
 
 Tự reload giữa phiên ôn làm mất hàng đợi đang chạy. Toast để người dùng chọn thời điểm.
 
-## Biểu đồ vẽ bằng SVG thuần
+## Biểu đồ tự vẽ, không thêm thư viện charting
 
-Hai biểu đồ (stacked bar cho mức thành thạo, bar chart cho dự báo 14 ngày) không đáng để thêm Chart.js (~70KB) hay bất kỳ thư viện charting nào. Mỗi biểu đồ kèm một bảng `sr-only` để screen reader đọc được số liệu.
+Ba biểu đồ (mức thành thạo theo chủ đề, dự báo 14 ngày, heatmap nhịp học) không đáng để thêm Chart.js (~70KB) hay bất kỳ thư viện charting nào.
+
+Chỉ vòng tiến độ (`RingProgress`) dùng SVG, vì cung tròn cần `stroke-dasharray`. Hai biểu đồ còn lại dùng flex + phần trăm: ít DOM hơn SVG, tự co giãn theo container mà không cần `viewBox`, và animate được bằng `transition` trên `width`/`height`. Mỗi biểu đồ kèm bảng hoặc đoạn `sr-only` để screen reader đọc được số liệu.
 
 ## Ngưỡng "đã thuộc" là `interval >= 21` ngày
 
@@ -85,3 +87,66 @@ Nó không thay được việc rà soát bằng mắt về tính đúng đắn 
 ## Deploy lên GitHub Pages với `paths.base`
 
 Pages phục vụ app tại `/<tên-repo>`, nên `BASE_PATH` được truyền vào lúc build trong CI. SvelteKit sinh đường dẫn asset dạng tương đối nên phần lớn hoạt động ở mọi subpath; `base` chỉ cần cho các liên kết nội bộ do client dựng.
+
+## Design language: OKLCH + hue dẫn xuất cho từng chủ đề
+
+Toàn bộ màu khai báo bằng OKLCH. Lý do thực dụng chứ không phải theo trend: trong OKLCH, L là độ sáng cảm nhận được. Nhờ vậy `oklch(52% 0.165 <hue>)` cho **mọi** hue đều có cùng độ tương phản trên nền trắng — đổi hue không phá vỡ khả năng đọc.
+
+Điều đó dẫn tới cách làm accent cho 11 chủ đề: mỗi chủ đề chỉ khai báo **một con số hue** trong `src/lib/theme/topic-accent.ts`, còn class `.accent` trong `app.css` dẫn xuất cả bộ (`--accent`, `--accent-soft`, `--accent-line`, `--accent-solid`) từ nó với L và C cố định. Thêm chủ đề mới là thêm một số, không phải thêm bảng màu và không phải kiểm tra lại tương phản.
+
+Trạng thái (`ok`/`warn`/`bad`) có ba biến thể: bản gốc đủ tương phản để làm **màu chữ**, `-soft` để làm **nền**, `-solid` để làm **khối đặc**. Trước đây chỉ có một biến thể nên `text-warn` ở light mode chỉ đạt ~3:1.
+
+## Tên class tự viết không được trùng namespace utility của Tailwind
+
+Tailwind v4 sinh utility từ các namespace token. Layer `utilities` luôn thắng layer `components`, nên một class tự viết trùng tên sẽ bị ghi đè **âm thầm** — không lỗi build, không cảnh báo.
+
+Lỗi này đã xảy ra hai lần trong lần refactor giao diện:
+
+- `.bg-aurora` (nền gradient) bị `bg-aurora` sinh từ token `--color-aurora` ghi đè thành `background-color` đặc → panel hero thành một khối cyan, chữ mất hẳn.
+- `.inline-md` (chữ markdown inline) bị `inline-md` sinh từ thang container ghi đè thành `inline-size: 28rem` → mọi tiêu đề câu hỏi rộng 448px và tràn ra khỏi thẻ.
+
+Hai class đó giờ tên là `.aurora-mesh` và `.prose-inline`. Quy tắc: **không đặt tên class trùng tiền tố của bất kỳ utility Tailwind nào** (`bg-`, `text-`, `inline-`, `w-`, `animate-`, `max-w-`…). Cách kiểm tra sau khi build: tìm tên class trong CSS đã build và xác nhận nó chỉ có đúng những declaration mình viết.
+
+## Font self-host, không dùng Google Fonts CDN
+
+App phải chạy offline từ lần mở thứ hai. Nhúng `fonts.googleapis.com` phá điều đó: lần mở đầu không mạng là mất font, và mọi lần mở đều phụ thuộc một domain thứ ba.
+
+Ba file woff2 (Inter latin, Inter vietnamese, JetBrains Mono latin — tổng ~99KB) nằm trong `src/lib/assets/fonts/`. Đặt trong `src/` chứ không phải `static/` để Vite gắn hash và tự viết lại URL trong CSS theo `paths.base` — nhờ vậy deploy ở subpath (GitHub Pages) vẫn đúng, và service worker precache chúng cùng các asset khác.
+
+Chỉ lấy subset `latin` + `vietnamese`: `latin-ext` của Inter nặng 85KB mà tiếng Việt không cần tới nó (Ă, Đ, Ơ, Ư và các dấu tổ hợp nằm trong subset `vietnamese`).
+
+## Sidebar xuất hiện từ `lg` (1024px), không phải `md` (768px)
+
+Sidebar rộng 15rem. Bật nó ở 768px làm cột nội dung tụt xuống 464px — **hẹp hơn cả khi không có sidebar ở 767px**, và lưới 3 cột bị bóp đến mức tiêu đề thẻ vỡ thành từng chữ.
+
+Ngưỡng đúng là 1024px, nơi còn lại 720px cho nội dung. Khoảng 768–1023px dùng dock nổi ở đáy như mobile nhưng nội dung tràn hết chiều rộng.
+
+## Thẻ lật 3D thật, làm được vì hai mặt cân nhau
+
+`transform-style: preserve-3d` + hai mặt xếp tuyệt đối trong một khung có `min-height` cố định. Cách này thường thất bại vì hai mặt lệch chiều cao gây nhảy layout, nhưng ở đây nó hợp lệ: `question` dài tối đa 133 ký tự và `answerShort` bị validator chặn ở 240 ký tự, nên chiều cao hai mặt chênh nhau không đáng kể.
+
+`backface-visibility: hidden` chỉ ẩn phần vẽ, mặt đang úp vẫn nhận chuột — nên có thêm `pointer-events: none` cho mặt úp, và `tabindex="-1"` cho phần tử focus được trên đó.
+
+Khi `prefers-reduced-motion: reduce`, phép quay bị tắt và hai mặt đổi nhau bằng `opacity` — vẫn đọc ra là hai mặt của một thẻ, không phải hai khối rời.
+
+## View Transitions là tăng cường thuần
+
+`onNavigate` gọi `document.startViewTransition` nếu có. Trình duyệt chưa hỗ trợ thì điều hướng diễn ra bình thường, chỉ không có hiệu ứng — không cần polyfill, không cần nhánh code thứ hai.
+
+Phần animation nằm trong `app.css` dưới `@media (prefers-reduced-motion: no-preference)`, và `onNavigate` cũng tự kiểm tra media query đó trước khi bật transition: nếu chỉ dựa vào CSS thì view transition vẫn chạy (chỉ mất animation) và gây một khung đứng hình.
+
+## Markdown inline được render trong tiêu đề câu hỏi
+
+Nội dung câu hỏi, lựa chọn quiz và giải thích quiz có backtick (`` `ArrayList` ``) và `**đậm**`. Trước đây chúng được in ra dưới dạng chữ thuần nên người đọc thấy nguyên dấu markdown.
+
+`renderInlineMarkdown()` dùng `marked.parseInline` (chứ không phải `parse`, vì `parse` bọc kết quả trong `<p>` và làm vỡ layout flex của các chỗ gọi) rồi sanitize với allowlist chỉ gồm `code`, `strong`, `em`, `br`.
+
+Chỗ chỉ nhận chữ thuần — thẻ `<title>`, `aria-label` — dùng `stripInlineMarkdown()` để bỏ dấu markdown thay vì render.
+
+## Chiều sâu dựng bằng bóng nhiều lớp ở light, viền sáng ở dark
+
+`--shadow-1..3` là bóng nhiều lớp với blur lớn hơn offset, cho bóng mềm thay vì cảm giác "dán tem".
+
+Trong dark mode bóng đổ gần như vô hình. Vì thế `.dark` định nghĩa lại thang bóng đậm hơn **và** `--edge` (viền sáng nội bộ ở cạnh trên, `inset 0 1px 0`) chuyển từ trắng đục sang trắng 6% — đúng cách các hệ điều hành tối dựng elevation.
+
+`backdrop-filter` chỉ dùng ở thanh nổi trên nội dung (dock, top bar, toast). Không dùng cho panel chứa chữ dài: tương phản chữ sẽ dao động theo nội dung phía sau, và có kèm fallback `@supports not (backdrop-filter: …)` sang nền đặc.

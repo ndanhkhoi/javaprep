@@ -1,6 +1,6 @@
 # JavaPrep
 
-> PWA cá nhân, mobile-first, hoạt động offline — ôn 100 câu hỏi phỏng vấn Java & Spring Boot theo chủ đề, có flashcard, quiz và spaced repetition.
+> PWA cá nhân, hoạt động offline — ôn 100 câu hỏi phỏng vấn Java & Spring Boot theo chủ đề, có flashcard, quiz và spaced repetition. Giao diện thích ứng: dock nổi trên điện thoại, sidebar + dashboard dạng bento trên desktop.
 
 **Demo:** https://ndanhkhoi.github.io/javaprep/
 
@@ -15,7 +15,7 @@
 | **Danh sách** | Tra cứu theo chủ đề, tìm kiếm không dấu, đọc giải thích đầy đủ kèm code |
 | **Flashcard** | Ôn chủ động: lật thẻ, tự chấm 4 mức, lịch ôn tự điều chỉnh theo SM-2 |
 | **Quiz** | Kiểm tra nhanh bằng trắc nghiệm 4 lựa chọn, có giải thích ngay sau mỗi câu |
-| **Tiến độ** | Số thẻ đến hạn, chuỗi ngày học, mức thành thạo theo chủ đề, lịch ôn 14 ngày tới |
+| **Tiến độ** | Số thẻ đến hạn, chuỗi ngày học, nhịp học dạng heatmap, mức thành thạo theo chủ đề, lịch ôn 14 ngày tới |
 
 Ngoài ra:
 
@@ -25,6 +25,9 @@ Ngoài ra:
 - **Ưu tiên chỗ yếu** — quiz tự đưa lại những câu bạn hay trả lời sai.
 - **Xuất / nhập tiến độ** dạng JSON để chuyển máy hoặc sao lưu.
 - **Dark mode**, tôn trọng `prefers-reduced-motion`, điều hướng được bằng bàn phím.
+- **Layout thích ứng** — dock nổi ở mobile/tablet, sidebar cố định và lưới bento từ 1024px.
+- **Thẻ lật 3D thật**, chuyển trang bằng View Transitions; tắt sạch khi user chọn giảm chuyển động.
+- **Font self-host** (Inter + JetBrains Mono, subset latin + vietnamese) — không gọi CDN nào, giữ nguyên tính offline-first.
 
 ## Nội dung
 
@@ -47,13 +50,15 @@ Mỗi câu gồm: câu hỏi, đáp án ngắn (mặt sau flashcard), giải th�
 |---|---|---|
 | Framework | SvelteKit 2 + Svelte 5 (runes) | Bundle nhỏ, prerender ra static thuần, không cần runtime server |
 | Adapter | `@sveltejs/adapter-static` | 119 trang tĩnh, host được ở bất kỳ đâu |
-| Styling | Tailwind CSS v4 | Mobile-first, design token qua `@theme`, không cần CSS riêng |
+| Styling | Tailwind CSS v4 | Design token OKLCH qua `@theme`; hue của 11 chủ đề dẫn xuất từ một biến duy nhất |
+| Chữ | Inter + JetBrains Mono variable, self-host (~99KB) | Không phụ thuộc CDN nên offline vẫn đủ font; subset chỉ latin + vietnamese |
+| Icon | Bộ SVG tự vẽ trong `components/ui/icons.ts` | App cần ~25 icon; mọi package icon đều kéo theo cả bộ hàng nghìn glyph |
 | Offline | Service worker tự viết (`$service-worker`) | Không thêm dependency; SvelteKit đã cung cấp danh sách asset và `version` |
 | Lưu trữ | `localStorage` có versioning | ~15KB state cho 100 thẻ; IndexedDB là over-engineering ở quy mô này |
 | Kiểm tra dữ liệu | Zod | Dùng chung cho validator nội dung và validate file sao lưu khi import |
 | Markdown | `marked` + `DOMPurify` | Sanitize sẵn để không mở đường XSS nếu sau này nhập nội dung ngoài |
 | Syntax highlight | `highlight.js/lib/core` (3 ngôn ngữ), tải lười | ~15KB thay vì ~300KB của bản đầy đủ |
-| Test | Vitest | 119 test cho toàn bộ logic thuần |
+| Test | Vitest | 126 test cho toàn bộ logic thuần |
 
 Không có backend, không có tài khoản, không có tracking. Toàn bộ dữ liệu nằm trên máy bạn.
 
@@ -87,9 +92,15 @@ src/
     data/          bộ câu hỏi (11 file theo chủ đề) + module tra cứu
     srs/           SM-2, tiện ích ngày, hàng đợi phiên ôn   — hàm thuần, có test
     quiz/          xáo trộn lựa chọn, chọn câu theo độ yếu  — hàm thuần, có test
-    stats/         streak, mức thành thạo, dự báo lịch ôn   — hàm thuần, có test
+    stats/         streak, thành thạo, dự báo, heatmap nhịp học — hàm thuần, có test
     stores/        state phản ứng + autosave có debounce
-    components/    UI dùng lại
+    theme/         hue accent theo chủ đề
+    assets/fonts/  woff2 self-host, Vite gắn hash
+    components/
+      ui/          primitive: Button, Icon, RingProgress, SegmentedControl…
+      shell/       app shell: SideNav, BottomDock, TopBar, ThemeToggle
+      charts/      3 biểu đồ SVG/flex thuần
+      …            component theo miền: Flashcard, QuizOption, TopicCard…
   routes/          các trang, toàn bộ prerender
 scripts/
   build-content.ts     tách nội dung thành phần nhẹ + phần tải lười
@@ -99,7 +110,7 @@ scripts/
 Nguyên tắc xuyên suốt: **mọi thứ quyết định tính đúng đắn đều là hàm thuần và có test** — SM-2, hàng đợi, xáo trộn lựa chọn, streak, dự báo. UI chỉ gọi chúng và hiển thị kết quả.
 
 Chi tiết các quyết định thiết kế và lý do đằng sau: [`docs/decisions.md`](docs/decisions.md).
-Hướng dẫn thêm câu hỏi và mở rộng tính năng: [`docs/extending.md`](docs/extending.md).
+Hướng dẫn thêm câu hỏi, sửa giao diện và mở rộng tính năng: [`docs/extending.md`](docs/extending.md).
 
 ## Giới hạn đã biết
 
