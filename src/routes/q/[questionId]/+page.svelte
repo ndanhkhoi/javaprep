@@ -40,18 +40,20 @@
 		<MarkdownBody source={data.question.answerShort} />
 	</section>
 
-	{#if data.question.code}
+	{#if data.detail?.code}
 		<section class="mb-4" aria-label="Ví dụ mã nguồn">
-			<CodeBlock code={data.question.code} />
+			<CodeBlock code={data.detail.code} />
 		</section>
 	{/if}
 
-	<section class="mb-4" aria-label="Giải thích đầy đủ">
-		<h2 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-			Giải thích đầy đủ
-		</h2>
-		<MarkdownBody source={data.question.answerLong} />
-	</section>
+	{#if data.detail}
+		<section class="mb-4" aria-label="Giải thích đầy đủ">
+			<h2 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+				Giải thích đầy đủ
+			</h2>
+			<MarkdownBody source={data.detail.answerLong} />
+		</section>
+	{/if}
 
 	<ul class="mb-6 flex flex-wrap gap-1.5" aria-label="Từ khoá">
 		{#each data.question.tags as tag (tag)}

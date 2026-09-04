@@ -9,7 +9,6 @@ function q(id: string, question: string, opts: Partial<Question> = {}): Question
 		difficulty: 'medium',
 		question,
 		answerShort: 'đáp án ngắn',
-		answerLong: 'đáp án dài',
 		tags: ['tag'],
 		quiz: { options: ['A', 'B', 'C', 'D'], correct: 0, explanation: 'vì thế' },
 		...opts

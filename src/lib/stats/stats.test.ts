@@ -18,7 +18,6 @@ function q(id: string, topic = 'java-core'): Question {
 		difficulty: 'easy',
 		question: 'Câu hỏi',
 		answerShort: 'ngắn',
-		answerLong: 'dài',
 		tags: ['x'],
 		quiz: { options: ['A', 'B', 'C', 'D'], correct: 0, explanation: 'vì thế' }
 	};

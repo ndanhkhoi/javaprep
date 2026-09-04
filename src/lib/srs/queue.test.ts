@@ -12,7 +12,6 @@ function q(id: string, topic = 'java-core', difficulty: Difficulty = 'medium'): 
 		difficulty,
 		question: `Q ${id}`,
 		answerShort: 'a',
-		answerLong: 'a',
 		tags: [],
 		quiz: { options: ['a', 'b', 'c', 'd'], correct: 0, explanation: 'e' }
 	};

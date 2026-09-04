@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "tsx scripts/build-content.ts",
     "dev": "vite dev",
+    "prebuild": "tsx scripts/build-content.ts",
     "build": "vite build",
     "preview": "vite preview",
+    "precheck": "tsx scripts/build-content.ts",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",

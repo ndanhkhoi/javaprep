@@ -2,8 +2,11 @@
  * Kiểm tra bộ câu hỏi trước khi build. Chạy trong CI — dữ liệu sai làm fail pipeline
  * thay vì âm thầm lọt lên production, vì nội dung sai còn tệ hơn không có nội dung.
  */
-import { bank, questions, topics } from '../src/lib/data/index';
+import { authoredBank } from '../src/lib/data/authored';
 import { questionBankSchema } from '../src/lib/data/questions.schema';
+
+const bank = authoredBank;
+const { questions, topics } = bank;
 
 const EXPECTED_TOTAL = 100;
 /** Không quá 40% đáp án đúng dồn về một vị trí, tránh việc đoán mò theo pattern. */

@@ -1,42 +1,14 @@
-import type { Question, QuestionBank, Topic } from '../types';
+import type { Question, QuestionDetail, Topic } from '../types';
 import topicsJson from './topics.json';
-import javaCore from './topics/java-core.json';
-import collectionsJson from './topics/collections.json';
-import concurrencyJson from './topics/concurrency.json';
-import jvmMemory from './topics/jvm-memory.json';
-import exceptionsJson from './topics/exceptions.json';
-import java8Plus from './topics/java8-plus.json';
-import springCore from './topics/spring-core.json';
-import springBoot from './topics/spring-boot.json';
-import springWeb from './topics/spring-web.json';
-import springData from './topics/spring-data.json';
-import springSecurity from './topics/spring-security.json';
+import questionsJson from './generated/questions.json';
 
 /**
- * Nội dung được tách theo từng file topic để mỗi file đủ nhỏ để đọc và review.
- * Import tĩnh nên Vite gộp sẵn lúc build — không có request mạng lúc chạy, và
- * service worker precache toàn bộ cùng bundle.
+ * Dữ liệu chạy trong app là bản **rút gọn** do `scripts/build-content.ts` sinh ra.
+ * Phần `answerLong`/`code` được tải lười qua {@link loadDetail} để không nằm trong
+ * bundle khởi động.
  */
-export const bank: QuestionBank = {
-	schemaVersion: 1,
-	topics: topicsJson as Topic[],
-	questions: [
-		...javaCore,
-		...collectionsJson,
-		...concurrencyJson,
-		...jvmMemory,
-		...exceptionsJson,
-		...java8Plus,
-		...springCore,
-		...springBoot,
-		...springWeb,
-		...springData,
-		...springSecurity
-	] as Question[]
-};
-
-export const topics: Topic[] = [...bank.topics].sort((a, b) => a.order - b.order);
-export const questions: Question[] = bank.questions;
+export const topics: Topic[] = [...(topicsJson as Topic[])].sort((a, b) => a.order - b.order);
+export const questions: Question[] = questionsJson as Question[];
 
 const questionIndex = new Map(questions.map((q) => [q.id, q]));
 const topicIndex = new Map(topics.map((t) => [t.id, t]));
@@ -60,10 +32,6 @@ export function questionsByTopic(topicId: string): Question[] {
 	return byTopic.get(topicId) ?? [];
 }
 
-export function countByTopic(topicId: string): number {
-	return questionsByTopic(topicId).length;
-}
-
 /** Câu trước/sau trong cùng chủ đề — dùng cho điều hướng ở trang chi tiết. */
 export function neighbours(id: string): { prev?: Question; next?: Question } {
 	const q = questionById(id);
@@ -71,4 +39,28 @@ export function neighbours(id: string): { prev?: Question; next?: Question } {
 	const siblings = questionsByTopic(q.topic);
 	const i = siblings.findIndex((s) => s.id === id);
 	return { prev: siblings[i - 1], next: siblings[i + 1] };
+}
+
+// Vite biến mỗi file thành một chunk riêng được tải theo yêu cầu.
+const detailLoaders = import.meta.glob<Record<string, QuestionDetail>>(
+	'./generated/detail/*.json',
+	{ import: 'default' }
+);
+
+const detailCache = new Map<string, Record<string, QuestionDetail>>();
+
+/** Tải phần giải thích dài của một chủ đề. Kết quả được cache cho các lần sau. */
+export async function loadDetail(
+	topicId: string,
+	questionId: string
+): Promise<QuestionDetail | undefined> {
+	const cached = detailCache.get(topicId);
+	if (cached) return cached[questionId];
+
+	const loader = detailLoaders[`./generated/detail/${topicId}.json`];
+	if (!loader) return undefined;
+
+	const loaded = await loader();
+	detailCache.set(topicId, loaded);
+	return loaded[questionId];
 }

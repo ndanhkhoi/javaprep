@@ -19,22 +19,34 @@ export type Quiz = {
 	explanation: string;
 };
 
+/**
+ * Bản rút gọn của câu hỏi, được nạp ngay từ đầu vì mọi màn hình đều cần: danh sách,
+ * tìm kiếm, flashcard và quiz. Phần nặng nhất (`answerLong`, `code`) nằm ở
+ * {@link QuestionDetail} và chỉ được tải khi mở trang chi tiết.
+ */
 export type Question = {
 	id: string;
 	topic: string;
 	difficulty: Difficulty;
 	question: string;
 	answerShort: string;
-	answerLong: string;
-	code?: string;
 	tags: string[];
 	quiz: Quiz;
 };
 
+/** Phần giải thích dài, tách ra để không nằm trong bundle khởi động. */
+export type QuestionDetail = {
+	answerLong: string;
+	code?: string;
+};
+
+/** Bản ghi đầy đủ như được biên soạn trong `src/lib/data/topics/*.json`. */
+export type AuthoredQuestion = Question & QuestionDetail;
+
 export type QuestionBank = {
 	schemaVersion: 1;
 	topics: Topic[];
-	questions: Question[];
+	questions: AuthoredQuestion[];
 };
 
 /** Trạng thái SM-2 của một thẻ. */

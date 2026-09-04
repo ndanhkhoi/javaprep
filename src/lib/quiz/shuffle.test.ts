@@ -9,7 +9,6 @@ function question(correct: number): Question {
 		difficulty: 'easy',
 		question: 'Câu hỏi thử',
 		answerShort: 'ngắn',
-		answerLong: 'dài',
 		tags: ['x'],
 		quiz: { options: ['A', 'B', 'C', 'D'], correct, explanation: 'vì thế' }
 	};
