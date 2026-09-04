@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Browse & Question Detail"
-status: pending
+status: completed
 priority: P2
 dependencies: [1, 2]
 effort: "M"

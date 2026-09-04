@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Deploy & Docs"
-status: pending
+status: completed
 priority: P3
 dependencies: [3, 4, 5, 6]
 effort: "S"

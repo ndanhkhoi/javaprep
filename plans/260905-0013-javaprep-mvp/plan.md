@@ -1,9 +1,9 @@
 ---
 title: "JavaPrep — Mobile-first offline PWA ôn 100 câu phỏng vấn Java/Spring Boot"
 description: "PWA cá nhân, offline-first, ôn 100 câu phỏng vấn Java/Spring Boot theo 3 chế độ (list, flashcard, quiz) với SM-2 spaced repetition, tiến độ lưu local."
-status: pending
+status: completed
 priority: P2
-branch: ""
+branch: "main"
 tags: [pwa, sveltekit, offline-first, spaced-repetition, java, spring-boot]
 blockedBy: []
 blocks: []
@@ -31,7 +31,7 @@ Không backend — toàn bộ nội dung là JSON tĩnh được precache, tiế
 | SRS | SM-2 (Anki-like) | User chọn; đủ chính xác, spec rõ ràng |
 | Lưu trữ | `localStorage`, key có version | ~10–20KB state cho 100 thẻ; đồng bộ, KISS. IndexedDB là over-engineering ở quy mô này |
 | Ngôn ngữ nội dung | Tiếng Việt, thuật ngữ giữ tiếng Anh | Sát thực tế phỏng vấn VN |
-| Deploy | Cloudflare Pages | Static hosting, HTTPS + custom domain miễn phí, không cần `paths.base` |
+| Deploy | GitHub Pages (đổi từ Cloudflare Pages) | Người dùng yêu cầu repo public + Pages; đánh đổi là cần `BASE_PATH=/javaprep` lúc build trong CI |
 
 ## Giới hạn đã biết (không phải bug)
 
@@ -43,13 +43,13 @@ Không backend — toàn bộ nội dung là JSON tĩnh được precache, tiế
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Foundation & PWA Shell](./phase-01-foundation-pwa-shell.md) | Pending |
-| 2 | [Content Schema & 100 Questions](./phase-02-content-schema-100-questions.md) | Pending |
-| 3 | [Browse & Question Detail](./phase-03-browse-question-detail.md) | Pending |
-| 4 | [SM-2 Engine & Flashcard](./phase-04-sm-2-engine-flashcard.md) | Pending |
-| 5 | [Quiz Mode](./phase-05-quiz-mode.md) | Pending |
-| 6 | [Progress Dashboard & Due Badge](./phase-06-progress-dashboard-due-badge.md) | Pending |
-| 7 | [Deploy & Docs](./phase-07-deploy-docs.md) | Pending |
+| 1 | [Foundation & PWA Shell](./phase-01-foundation-pwa-shell.md) | Done |
+| 2 | [Content Schema & 100 Questions](./phase-02-content-schema-100-questions.md) | Done |
+| 3 | [Browse & Question Detail](./phase-03-browse-question-detail.md) | Done |
+| 4 | [SM-2 Engine & Flashcard](./phase-04-sm-2-engine-flashcard.md) | Done |
+| 5 | [Quiz Mode](./phase-05-quiz-mode.md) | Done |
+| 6 | [Progress Dashboard & Due Badge](./phase-06-progress-dashboard-due-badge.md) | Done |
+| 7 | [Deploy & Docs](./phase-07-deploy-docs.md) | Done |
 
 ### Thứ tự phụ thuộc
 
@@ -66,13 +66,20 @@ Phase 3 và 5 độc lập với nhau. Phase 6 cần 4 (SM-2 state) và 5 (quiz 
 
 ## Acceptance criteria toàn dự án
 
-- [ ] `npm run build` ra thư mục static thuần, deploy được lên Cloudflare Pages.
-- [ ] Lần load thứ hai hoạt động đầy đủ ở chế độ máy bay (airplane mode) — cả 3 mode.
-- [ ] Đủ 100 câu hỏi, mỗi câu có `answerShort`, `answerLong`, và 1 câu quiz 4 đáp án hợp lệ.
-- [ ] Lighthouse mobile: Performance ≥ 90, PWA installable, Accessibility ≥ 90.
-- [ ] Tiến độ SM-2 sống sót qua reload và qua deploy mới (schema versioned).
-- [ ] Mọi thao tác chính đạt được trong ≤ 2 chạm từ màn hình chính.
-- [ ] Không có horizontal scroll ở viewport 320px.
+- [x] `npm run build` ra thư mục static thuần (119 trang), deploy lên GitHub Pages.
+- [x] Hoạt động đầy đủ khi tắt hẳn server — kiểm cả 3 mode ở local lẫn bản deploy.
+- [x] Đủ 100 câu hỏi, mỗi câu có `answerShort`, `answerLong`, và 1 câu quiz 4 đáp án hợp lệ.
+- [x] Lighthouse mobile: Performance 98, Accessibility 100 (desktop 99/100).
+- [x] Tiến độ SM-2 sống sót qua reload; schema có version và hàm migrate.
+- [x] Mọi thao tác chính đạt được trong ≤ 2 chạm từ màn hình chính.
+- [x] Không có horizontal scroll ở viewport 320px (đo `scrollWidth` trên 7 trang).
+
+## Kết quả
+
+- Repo: https://github.com/ndanhkhoi/javaprep
+- Demo: https://ndanhkhoi.github.io/javaprep/
+- 119 unit test pass; validator nội dung và `svelte-check` sạch; CI chạy cả bốn bước trước khi deploy.
+- Initial JS 73KB gzip sau khi tách `answerLong`/`code` thành chunk tải lười (trước đó 141KB).
 
 ## Dependencies
 

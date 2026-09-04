@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "SM-2 Engine & Flashcard"
-status: pending
+status: completed
 priority: P1
 dependencies: [1, 2]
 effort: "M"

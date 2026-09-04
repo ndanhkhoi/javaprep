@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Progress Dashboard & Due Badge"
-status: pending
+status: completed
 priority: P2
 dependencies: [4, 5]
 effort: "M"
