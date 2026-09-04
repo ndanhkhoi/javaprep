@@ -9,6 +9,16 @@
 		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
 		<meta name="theme-color" content="#0e1018" media="(prefers-color-scheme: dark)" />
 		<meta name="theme-color" content="#fbfcfe" media="(prefers-color-scheme: light)" />
+		<!-- Thẻ chia sẻ: link JavaPrep dán vào chat/mạng xã hội thì hiện tên, mô tả và
+		     icon thay vì một URL trơ. `%sveltekit.assets%` được thay bằng đường dẫn thật
+		     lúc build nên không phải hardcode domain vào đây. -->
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="JavaPrep" />
+		<meta property="og:locale" content="vi_VN" />
+		<meta property="og:title" content="JavaPrep — Ôn phỏng vấn Java &amp; Spring Boot" />
+		<meta property="og:description" content="100 câu hỏi phỏng vấn Java &amp; Spring Boot theo chủ đề — flashcard, quiz, spaced repetition. Hoạt động offline." />
+		<meta property="og:image" content="%sveltekit.assets%/icons/icon-512.png" />
+		<meta name="twitter:card" content="summary" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<title>JavaPrep</title>

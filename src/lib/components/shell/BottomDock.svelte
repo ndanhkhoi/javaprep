@@ -48,8 +48,8 @@
 						<Icon name={item.icon} size={22} strokeWidth={active ? 2.1 : 1.75} />
 						{#if item.badge && dueCount > 0}
 							<span
-								class="absolute -right-2.5 -top-1.5 min-w-4 rounded-full bg-bad-solid px-1
-								       text-center text-[0.625rem] font-bold leading-4 text-white"
+								class="absolute -right-2.5 -top-1.5 min-w-4.5 rounded-full bg-bad px-1
+								       text-center text-2xs font-bold leading-[1.05rem] text-bad-ink"
 							>
 								{dueCount > 99 ? '99+' : dueCount}
 							</span>

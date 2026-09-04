@@ -58,7 +58,7 @@
      khối code đọc ra như một cửa sổ editor. -->
 <figure class="surface-card overflow-hidden rounded-xl">
 	<figcaption
-		class="flex items-center gap-2 border-b border-border bg-surface-2 px-3 py-2"
+		class="flex items-center gap-2 border-b border-border bg-surface-2 px-3 py-1.5"
 	>
 		<span class="flex gap-1.5" aria-hidden="true">
 			<span class="size-2.5 rounded-full bg-bad-solid/60"></span>
@@ -73,14 +73,16 @@
 		</span>
 		<button
 			type="button"
-			class="flex min-h-8 items-center gap-1.5 rounded-md border border-border bg-elevated px-2
+			class="flex min-h-10 items-center gap-1.5 rounded-md border border-border bg-elevated px-2.5
 			       text-2xs font-semibold transition-colors duration-[var(--dur-fast)]
 			       {copied ? 'text-ok' : 'text-ink-muted hover:text-ink'}"
 			onclick={copy}
 		>
 			<Icon name={copied ? 'check' : 'copy'} size={13} strokeWidth={2.2} />
-			{copied ? 'Đã chép' : 'Chép'}
+			<span aria-hidden="true">{copied ? 'Đã chép' : 'Chép'}</span>
+			<span class="sr-only">Chép đoạn mã</span>
 		</button>
+		<output class="sr-only" aria-live="polite">{copied ? 'Đã chép đoạn mã' : ''}</output>
 	</figcaption>
 
 	<pre

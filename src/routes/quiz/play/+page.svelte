@@ -42,9 +42,9 @@
 	const isRight = $derived(current !== undefined && selected === current.correct);
 
 	const verdict = $derived.by(() => {
-		if (percent >= 80) return { emoji: '🏆', title: 'Rất tốt', tone: 'text-ok' };
-		if (percent >= 50) return { emoji: '👍', title: 'Tạm được', tone: 'text-warn' };
-		return { emoji: '📚', title: 'Cần ôn thêm', tone: 'text-bad' };
+		if (percent >= 80) return { icon: 'trophy' as const, title: 'Rất tốt' };
+		if (percent >= 50) return { icon: 'target' as const, title: 'Tạm được' };
+		return { icon: 'book' as const, title: 'Cần ôn thêm' };
 	});
 
 	// Rời giữa phiên làm mất kết quả đang có -> hỏi lại. QuizStat từng câu đã được ghi
@@ -89,9 +89,9 @@
 <svelte:head><title>Quiz — JavaPrep</title></svelte:head>
 <svelte:window onkeydown={onKeydown} />
 
-<div
-	class="mx-auto flex max-w-xl flex-col lg:min-h-[calc(100dvh-12rem)] lg:justify-center"
->
+<!-- Căn giữa theo chiều dọc: nội dung nằm trong vùng ngón tay với tới, không bị dồn
+     lên sát đỉnh màn hình và để trống nửa dưới. -->
+<div class="mx-auto flex min-h-[calc(100dvh-16rem)] max-w-xl flex-col justify-center">
 	{#if finished}
 		<section class="relative pt-4">
 			{#if percent >= 50}
@@ -120,8 +120,8 @@
 					</span>
 				</RingProgress>
 
-				<h1 class="mt-5 text-title font-extrabold">
-					<span aria-hidden="true">{verdict.emoji}</span>
+				<h1 class="mt-5 flex items-center gap-2 text-title font-extrabold">
+					<Icon name={verdict.icon} size={24} strokeWidth={1.9} />
 					{verdict.title}
 				</h1>
 				<p class="mt-1 text-sm text-ink-muted">
@@ -134,9 +134,7 @@
 			</div>
 
 			{#if wrong.length > 0}
-				<h2 class="mb-2.5 mt-7 text-2xs font-bold uppercase tracking-[0.13em] text-ink-muted">
-					Câu cần xem lại
-				</h2>
+				<h2 class="eyebrow mb-2.5 mt-7 text-ink-muted">Câu cần xem lại</h2>
 				<ul class="space-y-2.5">
 					{#each wrong as item (item.question.id)}
 						<li class="surface-card rounded-xl p-4">
@@ -150,8 +148,8 @@
 							</p>
 							<a
 								href="{base}/q/{item.question.id}"
-								class="mt-2.5 inline-flex min-h-8 items-center gap-1.5 text-xs font-semibold
-								       text-brand"
+								class="mt-1.5 -ms-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2
+								       text-xs font-semibold text-brand"
 							>
 								Xem giải thích
 								<Icon name="arrowRight" size={14} strokeWidth={2} />
@@ -176,8 +174,8 @@
 		<div class="mb-4 flex items-center gap-3">
 			<a
 				href="{base}/quiz"
-				class="flex min-h-9 items-center gap-1 pe-2 text-xs font-medium text-ink-muted
-				       transition-colors hover:text-ink"
+				class="-ms-2 flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-medium
+				       text-ink-muted transition-colors hover:text-ink"
 			>
 				<Icon name="chevronLeft" size={14} />
 				Thoát
@@ -229,7 +227,8 @@
 				/>
 				<a
 					href="{base}/q/{current.question.id}"
-					class="mt-2.5 inline-flex min-h-8 items-center gap-1.5 text-xs font-semibold text-brand"
+					class="mt-1.5 -ms-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-xs
+					       font-semibold text-brand"
 				>
 					Xem giải thích đầy đủ
 					<Icon name="arrowRight" size={14} strokeWidth={2} />
@@ -242,15 +241,28 @@
 			</Button>
 		{:else}
 			<p
-				class="mt-4 flex items-center justify-center gap-1.5 text-2xs text-ink-subtle max-sm:hidden"
+				class="mt-4 flex items-center justify-center gap-1.5 text-2xs text-ink-muted max-sm:hidden"
 			>
 				<Icon name="keyboard" size={13} />
 				Phím tắt: 1–4 để chọn
 			</p>
 		{/if}
 	{:else}
-		<p class="py-16 text-center text-sm text-ink-muted">
-			Không có câu hỏi nào trong phạm vi này.
-		</p>
+		<section class="surface-panel rounded-2xl p-6 text-center sm:p-8">
+			<span
+				class="mx-auto grid size-14 place-items-center rounded-2xl bg-surface-3 text-ink-muted"
+				aria-hidden="true"
+			>
+				<Icon name="quiz" size={26} />
+			</span>
+			<h1 class="mt-4 text-heading font-bold">Không có câu hỏi nào trong phạm vi này</h1>
+			<p class="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-ink-muted">
+				Chọn lại chủ đề hoặc số câu rồi bắt đầu một lượt mới.
+			</p>
+			<Button href="{base}/quiz" size="lg" full class="mt-6">
+				<Icon name="filter" size={17} />
+				Chọn lại phạm vi
+			</Button>
+		</section>
 	{/if}
 </div>

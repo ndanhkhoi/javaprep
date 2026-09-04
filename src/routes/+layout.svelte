@@ -114,7 +114,7 @@
 				       font-medium text-warn"
 				role="status"
 			>
-				<Icon name="target" size={14} />
+				<Icon name="alert" size={14} />
 				Trình duyệt đang chặn lưu trữ cục bộ — tiến độ sẽ không được giữ lại.
 			</p>
 		{/if}
@@ -130,6 +130,6 @@
 	<BottomDock />
 
 	{#if waitingWorker}
-		<UpdateToast onReload={reload} />
+		<UpdateToast onReload={reload} onDismiss={() => (waitingWorker = null)} />
 	{/if}
 </div>

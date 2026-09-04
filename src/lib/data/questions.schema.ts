@@ -7,7 +7,6 @@ export const topicSchema = z.object({
 		.string()
 		.regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'topic id phải là kebab-case'),
 	name: z.string().min(1),
-	icon: z.string().min(1),
 	blurb: z.string().min(1),
 	order: z.number().int().positive()
 });

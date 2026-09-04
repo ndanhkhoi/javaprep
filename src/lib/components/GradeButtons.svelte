@@ -47,15 +47,17 @@
 			class="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border px-1
 			       transition-[border-color,transform,background-color] duration-[var(--dur-fast)]
 			       active:scale-[0.96] {button.classes}"
+			aria-keyshortcuts={button.key}
 			onclick={() => onGrade(button.grade)}
 		>
 			<span class="text-[0.8125rem] font-bold leading-none">{button.label}</span>
-			<span class="text-2xs font-medium leading-none tabular-nums opacity-80">
+			<span class="text-2xs font-medium leading-none tabular-nums">
 				{previews[button.grade]}
 			</span>
 			<kbd
-				class="mt-0.5 hidden rounded border border-current px-1 text-[0.5625rem] font-semibold
-				       leading-[0.95rem] opacity-70 sm:block"
+				class="mt-0.5 hidden rounded border border-current px-1.5 text-2xs font-semibold
+				       leading-[1.05rem] sm:block"
+				aria-hidden="true"
 			>
 				{button.key}
 			</kbd>

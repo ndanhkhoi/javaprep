@@ -160,11 +160,7 @@
 
 {#if weakest.length > 0}
 	<section class="mt-4" aria-labelledby="weakest-heading">
-		<h2
-			id="weakest-heading"
-			class="mb-2.5 flex items-center gap-2 text-2xs font-bold uppercase tracking-[0.13em]
-			       text-ink-muted"
-		>
+		<h2 id="weakest-heading" class="eyebrow mb-2.5 flex items-center gap-2 text-ink-muted">
 			<Icon name="target" size={13} />
 			Câu hay sai nhất
 		</h2>

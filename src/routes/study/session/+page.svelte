@@ -8,6 +8,7 @@
 	import Celebrate from '$lib/components/ui/Celebrate.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import { questions } from '$lib/data';
+	import { formatIsoDate } from '$lib/srs/date';
 	import { buildSession } from '$lib/srs/queue';
 	import { progress } from '$lib/stores/progress.svelte';
 	import type { Grade, Question } from '$lib/types';
@@ -38,7 +39,9 @@
 	});
 
 	const current = $derived(queue[0]);
-	const finished = $derived(started && queue.length === 0);
+	/** Vào phiên khi không còn thẻ nào — không phải "đã ôn xong", nên không chúc mừng. */
+	const nothingToDo = $derived(started && initialSize === 0);
+	const finished = $derived(started && initialSize > 0 && queue.length === 0);
 	const done = $derived(Math.max(0, initialSize - queue.length));
 	const accuracy = $derived(graded === 0 ? 0 : Math.round((recalled / graded) * 100));
 	const nextDue = $derived(
@@ -50,6 +53,7 @@
 	const nextDueCount = $derived(
 		nextDue ? Object.values(progress.cards).filter((c) => c.due === nextDue).length : 0
 	);
+	const nextDueLabel = $derived(nextDue ? formatIsoDate(nextDue) : '');
 
 	function grade(value: Grade): void {
 		const question = current;
@@ -91,19 +95,47 @@
 <svelte:head><title>Phiên ôn — JavaPrep</title></svelte:head>
 <svelte:window onkeydown={onKeydown} />
 
-<div
-	class="mx-auto flex max-w-xl flex-col lg:min-h-[calc(100dvh-12rem)] lg:justify-center"
->
-	{#if finished}
+<!-- Căn giữa theo chiều dọc: thẻ và bộ nút chấm nằm trong vùng ngón tay với tới,
+     không bị dồn lên sát đỉnh màn hình và để trống nửa dưới. -->
+<div class="mx-auto flex min-h-[calc(100dvh-16rem)] max-w-xl flex-col justify-center">
+	{#if nothingToDo}
+		<section class="surface-panel rounded-2xl p-6 text-center sm:p-8">
+			<span
+				class="mx-auto grid size-16 place-items-center rounded-2xl bg-ok-soft text-ok"
+				aria-hidden="true"
+			>
+				<Icon name="check" size={30} strokeWidth={2.4} />
+			</span>
+			<h1 class="mt-4 text-title font-extrabold">Không có thẻ nào để ôn</h1>
+			<p class="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink-muted">
+				{#if topic}
+					Chủ đề này đã hết thẻ đến hạn và hết thẻ mới cho hôm nay. Đổi phạm vi hoặc tăng giới hạn
+					thẻ mới trong Cài đặt.
+				{:else}
+					Lịch ôn hôm nay đã sạch và bạn cũng đã dùng hết lượng thẻ mới của ngày.
+				{/if}
+			</p>
+			<div class="mt-6 flex flex-col gap-2.5">
+				<Button href="{base}/study" size="lg" full>
+					<Icon name="cards" size={18} strokeWidth={2} />
+					Đổi phạm vi ôn
+				</Button>
+				<Button href="{base}/quiz" variant="secondary" size="lg" full>
+					<Icon name="quiz" size={18} />
+					Làm quiz thay thế
+				</Button>
+			</div>
+		</section>
+	{:else if finished}
 		<section class="relative pt-4 text-center">
 			<Celebrate />
 
 			<span
 				class="animate-pop aurora-mesh mx-auto grid size-20 place-items-center rounded-3xl border
-				       border-brand-line text-3xl shadow-2"
+				       border-brand-line text-brand shadow-2"
 				aria-hidden="true"
 			>
-				🎉
+				<Icon name="trophy" size={34} strokeWidth={1.8} />
 			</span>
 			<h1 class="mt-4 text-title font-extrabold">Xong phiên ôn</h1>
 			<p class="mt-1.5 text-sm text-ink-muted">
@@ -112,15 +144,15 @@
 
 			<dl class="mt-6 grid grid-cols-3 gap-2.5 text-center">
 				<div class="surface-card rounded-xl p-3">
-					<dt class="text-2xs font-semibold uppercase tracking-wider text-ink-muted">Lượt chấm</dt>
+					<dt class="text-2xs font-semibold text-ink-muted">Lượt chấm</dt>
 					<dd class="mt-1 text-2xl font-extrabold tabular-nums">{graded}</dd>
 				</div>
 				<div class="surface-card rounded-xl p-3">
-					<dt class="text-2xs font-semibold uppercase tracking-wider text-ink-muted">Nhớ được</dt>
+					<dt class="text-2xs font-semibold text-ink-muted">Nhớ được</dt>
 					<dd class="mt-1 text-2xl font-extrabold tabular-nums text-ok">{recalled}</dd>
 				</div>
 				<div class="surface-card rounded-xl p-3">
-					<dt class="text-2xs font-semibold uppercase tracking-wider text-ink-muted">Học lại</dt>
+					<dt class="text-2xs font-semibold text-ink-muted">Học lại</dt>
 					<dd class="mt-1 text-2xl font-extrabold tabular-nums text-warn">{relearned}</dd>
 				</div>
 			</dl>
@@ -132,7 +164,7 @@
 				>
 					<Icon name="clock" size={14} />
 					Đến hạn tiếp theo: <strong class="font-bold text-ink">{nextDueCount} thẻ</strong>
-					vào {nextDue}
+					vào {nextDueLabel}
 				</p>
 			{/if}
 
@@ -149,11 +181,11 @@
 		</section>
 	{:else if current}
 		<h1 class="sr-only">Phiên ôn thẻ</h1>
-		<div class="mb-4 flex items-center gap-3">
+		<div class="mb-4 flex items-center gap-2">
 			<a
 				href="{base}/study"
-				class="flex min-h-9 items-center gap-1 rounded-lg pe-2 text-xs font-medium text-ink-muted
-				       transition-colors hover:text-ink"
+				class="-ms-2 flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-medium
+				       text-ink-muted transition-colors hover:text-ink"
 				aria-label="Kết thúc phiên ôn"
 			>
 				<Icon name="chevronLeft" size={14} />

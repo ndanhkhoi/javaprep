@@ -9,6 +9,7 @@
 	import { masteryOf } from '$lib/stats/mastery';
 	import { progress } from '$lib/stores/progress.svelte';
 	import { accentStyle } from '$lib/theme/topic-accent';
+	import { topicIcon } from '$lib/theme/topic-icon';
 	import type { Difficulty } from '$lib/types';
 
 	let { data } = $props();
@@ -51,8 +52,8 @@
 <div class="accent mx-auto max-w-4xl" style={accentStyle(data.topic.id)}>
 	<a
 		href="{base}/"
-		class="mb-3 inline-flex min-h-8 items-center gap-1 text-xs font-medium text-ink-muted
-		       transition-colors hover:text-ink"
+		class="mb-2 -ms-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-medium
+		       text-ink-muted transition-colors hover:text-ink"
 	>
 		<Icon name="chevronLeft" size={14} />
 		Chủ đề
@@ -70,10 +71,10 @@
 		<div class="flex items-start gap-4">
 			<span
 				class="grid size-14 shrink-0 place-items-center rounded-2xl bg-[var(--accent-soft)]
-				       text-2xl leading-none"
+				       text-[var(--accent)]"
 				aria-hidden="true"
 			>
-				{data.topic.icon}
+				<Icon name={topicIcon(data.topic.id)} size={26} strokeWidth={1.8} />
 			</span>
 			<div class="min-w-0 flex-1">
 				<h1 class="text-title font-extrabold">{data.topic.name}</h1>
@@ -99,14 +100,14 @@
 
 	<section class="mb-4">
 		<div class="mb-2.5 flex items-baseline justify-between gap-3">
-			<h2 class="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-[0.13em] text-ink-muted">
+			<h2 id="filter-heading" class="eyebrow flex items-center gap-1.5 text-ink-muted">
 				<Icon name="filter" size={13} />
 				Lọc
 			</h2>
 			{#if hasFilter}
 				<button
 					type="button"
-					class="min-h-8 text-2xs font-semibold text-brand hover:underline"
+					class="-me-2 min-h-11 rounded-lg px-2 text-2xs font-semibold text-brand hover:underline"
 					onclick={clearFilters}
 				>
 					Bỏ lọc
@@ -114,7 +115,7 @@
 			{/if}
 		</div>
 
-		<div class="flex flex-wrap items-center gap-2">
+		<div class="flex flex-wrap items-center gap-2" role="group" aria-labelledby="filter-heading">
 			{#each DIFFICULTIES as d (d.value)}
 				<FilterChip
 					active={difficulty === d.value}
@@ -140,7 +141,7 @@
 			<p class="text-sm font-medium">Không có câu nào khớp bộ lọc.</p>
 			<button
 				type="button"
-				class="mt-2 min-h-9 text-xs font-semibold text-brand hover:underline"
+				class="mt-1 min-h-11 px-3 text-xs font-semibold text-brand hover:underline"
 				onclick={clearFilters}
 			>
 				Bỏ lọc để xem tất cả

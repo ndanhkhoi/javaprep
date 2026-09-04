@@ -3,6 +3,7 @@
 	import ProgressBar from './ProgressBar.svelte';
 	import Icon from './ui/Icon.svelte';
 	import { accentStyle } from '$lib/theme/topic-accent';
+	import { topicIcon } from '$lib/theme/topic-icon';
 	import type { MasteryBreakdown } from '$lib/stats/mastery';
 	import type { Topic } from '$lib/types';
 
@@ -16,8 +17,8 @@
 
 <a
 	href="{base}/topic/{topic.id}"
-	class="accent surface-card group relative flex h-full w-full flex-col gap-3 overflow-hidden rounded-xl p-4
-	       transition-[border-color,box-shadow,transform] duration-[var(--dur)]
+	class="accent surface-card group relative flex h-full w-full flex-col gap-2.5 overflow-hidden
+	       rounded-xl p-4 transition-[border-color,box-shadow,transform] duration-[var(--dur)]
 	       ease-[var(--ease-out-quart)] hover:-translate-y-0.5
 	       hover:border-[var(--accent-line)] hover:shadow-2"
 	style={accentStyle(topic.id)}
@@ -30,18 +31,21 @@
 		aria-hidden="true"
 	></span>
 
-	<div class="flex items-start gap-3">
+	<!-- Icon và phần trăm nằm cùng một hàng, tên chủ đề chiếm cả bề rộng phía dưới: ở
+	     lưới 2 cột trên màn 375px, tên đặt cạnh icon chỉ còn ~80px nên "Concurrency"
+	     bị cắt giữa từ. -->
+	<div class="flex items-center justify-between gap-2">
 		<span
-			class="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--accent-soft)] text-base
-			       leading-none sm:size-10 sm:text-lg"
+			class="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--accent-soft)]
+			       text-[var(--accent)] sm:size-10"
 			aria-hidden="true"
 		>
-			{topic.icon}
+			<Icon name={topicIcon(topic.id)} size={19} strokeWidth={1.9} />
 		</span>
-		<h3 class="min-w-0 flex-1 text-sm font-bold leading-snug [overflow-wrap:anywhere]">
-			{topic.name}
-		</h3>
+		<span class="text-2xs font-bold tabular-nums text-[var(--accent)]">{percent}%</span>
 	</div>
+
+	<h3 class="text-sm font-bold leading-snug [overflow-wrap:anywhere]">{topic.name}</h3>
 
 	<p class="line-clamp-2 text-2xs leading-relaxed text-ink-muted">{topic.blurb}</p>
 
@@ -52,10 +56,9 @@
 			max={mastery.total}
 			label="{topic.name}: {mastery.mature} trên {mastery.total} câu đã thuộc"
 		/>
-		<p class="flex items-center gap-1.5 text-2xs tabular-nums text-ink-subtle">
+		<p class="flex items-center gap-1.5 text-2xs tabular-nums text-ink-muted">
 			<Icon name="book" size={12} />
 			<span class="min-w-0 flex-1 truncate">{studied}/{mastery.total} đã học</span>
-			<span class="shrink-0 font-bold text-[var(--accent)]">{percent}%</span>
 		</p>
 	</div>
 </a>

@@ -25,9 +25,9 @@
 <div>
 	<div class="flex gap-1.5">
 		<!-- Nhãn thứ: chỉ 3 hàng để không rối, đúng cách các lưới đóng góp vẫn làm. -->
-		<ul class="flex shrink-0 flex-col gap-[3px] pt-[1.125rem]" aria-hidden="true">
+		<ul class="flex shrink-0 flex-col gap-[3px] pt-[1.25rem]" aria-hidden="true">
 			{#each DOW as day, i (day)}
-				<li class="h-3 text-[0.5rem] leading-3 text-ink-subtle">
+				<li class="h-3 text-[0.625rem] leading-3 text-ink-subtle">
 					{i % 2 === 0 ? day : ''}
 				</li>
 			{/each}
@@ -37,7 +37,10 @@
 			<div class="flex gap-[3px]">
 				{#each weeks as week, w (week[0].date)}
 					<div class="flex flex-col gap-[3px]">
-						<span class="h-4 text-[0.5rem] leading-4 text-ink-subtle" aria-hidden="true">
+						<span
+							class="h-4 text-[0.625rem] leading-4 text-ink-subtle"
+							aria-hidden="true"
+						>
 							{monthLabels[w]}
 						</span>
 						{#each week as cell (cell.date)}
@@ -46,7 +49,7 @@
 									? 'bg-transparent'
 									: cell.studied
 										? 'bg-ok-solid'
-										: 'bg-surface-3'}
+										: 'bg-surface-4'}
 								       {cell.date === today ? 'ring-1 ring-brand ring-offset-1 ring-offset-elevated' : ''}"
 								title={cell.future
 									? cell.date
@@ -60,11 +63,11 @@
 		</div>
 	</div>
 
-	<div class="mt-3 flex items-center justify-between gap-3 text-2xs text-ink-subtle">
+	<div class="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-2xs text-ink-muted">
 		<p class="tabular-nums">{totalDays} ngày đã ôn trong {weeks.length} tuần gần đây</p>
 		<p class="flex items-center gap-1.5">
 			Không
-			<span class="size-2.5 rounded-[3px] bg-surface-3" aria-hidden="true"></span>
+			<span class="size-2.5 rounded-[3px] bg-surface-4" aria-hidden="true"></span>
 			<span class="size-2.5 rounded-[3px] bg-ok-solid" aria-hidden="true"></span>
 			Có ôn
 		</p>

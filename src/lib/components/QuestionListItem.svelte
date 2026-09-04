@@ -5,6 +5,7 @@
 	import Icon from './ui/Icon.svelte';
 	import { topicById } from '$lib/data';
 	import { accentStyle } from '$lib/theme/topic-accent';
+	import { topicIcon } from '$lib/theme/topic-icon';
 	import type { MasteryLevel } from '$lib/srs/sm2';
 	import type { Question } from '$lib/types';
 
@@ -40,8 +41,11 @@
 
 	<span class="min-w-0 flex-1">
 		{#if topic}
-			<span class="mb-0.5 block truncate text-2xs font-semibold text-[var(--accent)]">
-				{topic.icon} {topic.name}
+			<span
+				class="mb-0.5 flex items-center gap-1.5 text-2xs font-semibold text-[var(--accent)]"
+			>
+				<Icon name={topicIcon(topic.id)} size={13} strokeWidth={2} />
+				<span class="truncate">{topic.name}</span>
 			</span>
 		{/if}
 		<InlineMarkdown source={question.question} class="block text-sm font-medium leading-snug" />

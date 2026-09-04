@@ -50,13 +50,13 @@
 	--color-surface-3: oklch(94.2% 0.008 274);
 	--color-surface-4: oklch(91% 0.011 274);
 	--color-elevated: oklch(100% 0 0);
-	--color-border: oklch(90.5% 0.008 274);
-	--color-border-strong: oklch(83% 0.014 274);
+	--color-border: oklch(88.5% 0.01 274);
+	--color-border-strong: oklch(80% 0.016 274);
 
 	/* --- Chữ: 3 bậc để không phải dùng opacity (opacity làm chữ mờ, không chỉ nhạt) --- */
 	--color-ink: oklch(24% 0.021 274);
-	--color-ink-muted: oklch(50% 0.018 274);
-	--color-ink-subtle: oklch(62% 0.015 274);
+	--color-ink-muted: oklch(47% 0.018 274);
+	--color-ink-subtle: oklch(54% 0.015 274);
 
 	/* --- Brand --- */
 	--color-brand: oklch(52% 0.19 274);
@@ -69,23 +69,37 @@
 	--color-aurora: oklch(58% 0.16 196);
 	--color-aurora-2: oklch(60% 0.19 322);
 
-	/* --- Trạng thái: `base` an toàn cho chữ, `soft` cho nền, `solid` cho khối đặc --- */
+	/* --- Trạng thái ---------------------------------------------------------
+	   Bốn vai trò cho mỗi trạng thái, mỗi vai trò có một cặp tương phản đã kiểm:
+	   - `base`  chữ trên nền sáng/tối (>= 4.5:1 trên surface, elevated, soft)
+	   - `soft`  nền nhạt đi kèm `base`
+	   - `ink`   chữ nằm TRÊN `base` khi dùng `base` làm nền đặc (badge, chip)
+	   - `solid` khối đồ hoạ (cột, vòng, đoạn bar) — chọn để đạt >= 3:1 với track
+	   Không đặt chữ lên `solid`: ở tông giữa, cả trắng và đen đều không đủ 4.5:1. */
 	--color-ok: oklch(47% 0.135 152);
 	--color-ok-soft: oklch(94.5% 0.045 152);
-	--color-ok-solid: oklch(58% 0.16 152);
+	--color-ok-ink: oklch(99% 0.006 152);
+	--color-ok-solid: oklch(56% 0.145 152);
 	--color-warn: oklch(51% 0.125 62);
 	--color-warn-soft: oklch(95.5% 0.045 75);
-	--color-warn-solid: oklch(72% 0.16 75);
+	--color-warn-ink: oklch(99% 0.006 62);
+	--color-warn-solid: oklch(63% 0.125 72);
 	--color-bad: oklch(51% 0.19 22);
 	--color-bad-soft: oklch(95.5% 0.032 22);
-	--color-bad-solid: oklch(58% 0.2 22);
+	--color-bad-ink: oklch(99% 0.006 22);
+	--color-bad-solid: oklch(57% 0.195 22);
 
 	/* --- Chữ --- */
 	--font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-	--text-2xs: 0.6875rem;
-	--text-2xs--line-height: 1.35;
+	/* Bậc nhỏ nhất được phép dùng cho chữ là 12px — nhỏ hơn thì không đọc nổi trên
+	   điện thoại và trượt chuẩn tương phản ở mọi màu chữ nhạt. */
+	--text-2xs: 0.75rem;
+	--text-2xs--line-height: 1.4;
+
+	/* Một giá trị tracking duy nhất cho mọi nhãn eyebrow in hoa. */
+	--tracking-eyebrow: 0.12em;
 
 	/* Thang display fluid: cùng một class cho mobile và desktop, không cần breakpoint. */
 	--text-display: clamp(1.75rem, 1.15rem + 2.6vw, 2.75rem);
@@ -124,12 +138,12 @@
 	--color-surface-3: oklch(25.5% 0.023 274);
 	--color-surface-4: oklch(30% 0.025 274);
 	--color-elevated: oklch(22.5% 0.022 274);
-	--color-border: oklch(31% 0.022 274);
-	--color-border-strong: oklch(41% 0.026 274);
+	--color-border: oklch(33.5% 0.022 274);
+	--color-border-strong: oklch(44% 0.026 274);
 
 	--color-ink: oklch(96% 0.006 274);
 	--color-ink-muted: oklch(73% 0.014 274);
-	--color-ink-subtle: oklch(60% 0.016 274);
+	--color-ink-subtle: oklch(64% 0.016 274);
 
 	--color-brand: oklch(74% 0.155 274);
 	--color-brand-hover: oklch(80% 0.14 274);
@@ -142,13 +156,16 @@
 
 	--color-ok: oklch(79% 0.15 152);
 	--color-ok-soft: oklch(27% 0.06 152);
+	--color-ok-ink: oklch(18% 0.035 152);
 	--color-ok-solid: oklch(70% 0.16 152);
 	--color-warn: oklch(83% 0.13 78);
 	--color-warn-soft: oklch(29% 0.05 70);
+	--color-warn-ink: oklch(18% 0.035 62);
 	--color-warn-solid: oklch(77% 0.15 75);
 	--color-bad: oklch(75% 0.16 22);
 	--color-bad-soft: oklch(28.5% 0.07 22);
-	--color-bad-solid: oklch(62% 0.19 22);
+	--color-bad-ink: oklch(18% 0.035 22);
+	--color-bad-solid: oklch(66% 0.19 22);
 
 	/* Trong dark mode bóng đổ gần như vô hình. Chiều sâu chuyển sang dùng viền sáng
 	   ở cạnh trên (inner highlight) — đúng cách các OS tối dựng elevation. */
@@ -236,6 +253,19 @@ a[role='button'],
 }
 
 @layer components {
+	/* --- Chữ ----------------------------------------------------------------- */
+
+	/** Nhãn in hoa nhỏ mở đầu một khối. Gom vào một class vì trước đó mỗi trang tự
+	    chọn cỡ chữ, độ đậm và tracking riêng — ba giá trị lệch nhau là đủ để mắt
+	    nhận ra sự thiếu nhất quán. Màu để bên ngoài quyết định. */
+	.eyebrow {
+		font-size: var(--text-2xs);
+		line-height: 1.35;
+		font-weight: 700;
+		letter-spacing: var(--tracking-eyebrow);
+		text-transform: uppercase;
+	}
+
 	/* --- Vật liệu ------------------------------------------------------------ */
 
 	/** Mặt phẳng chuẩn cho card: nền nổi + viền + bóng nhẹ + cạnh sáng phía trên. */

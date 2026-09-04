@@ -10,6 +10,7 @@
 	import { stripInlineMarkdown } from '$lib/markdown';
 	import { progress } from '$lib/stores/progress.svelte';
 	import { accentStyle } from '$lib/theme/topic-accent';
+	import { topicIcon } from '$lib/theme/topic-icon';
 
 	let { data } = $props();
 
@@ -31,11 +32,11 @@
 		{#if data.topic}
 			<a
 				href="{base}/topic/{data.topic.id}"
-				class="mb-3 inline-flex min-h-8 items-center gap-1.5 text-xs font-semibold
-				       text-[var(--accent)] transition-opacity hover:opacity-80"
+				class="mb-2 -ms-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-xs
+				       font-semibold text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)]"
 			>
 				<Icon name="chevronLeft" size={14} />
-				<span aria-hidden="true">{data.topic.icon}</span>
+				<Icon name={topicIcon(data.topic.id)} size={14} strokeWidth={2} />
 				{data.topic.name}
 			</a>
 		{/if}
@@ -70,8 +71,7 @@
 	>
 		<h2
 			id="short-answer-heading"
-			class="mb-1.5 flex items-center gap-1.5 text-2xs font-bold uppercase tracking-[0.13em]
-			       text-[var(--accent)]"
+			class="eyebrow mb-1.5 flex items-center gap-1.5 text-[var(--accent)]"
 		>
 			<Icon name="bolt" size={13} strokeWidth={2.2} />
 			Đáp án ngắn
@@ -83,7 +83,7 @@
 		<section class="mb-6" aria-labelledby="code-heading">
 			<h2
 				id="code-heading"
-				class="mb-2.5 text-2xs font-bold uppercase tracking-[0.13em] text-ink-muted"
+				class="eyebrow mb-2.5 text-ink-muted"
 			>
 				Ví dụ mã nguồn
 			</h2>
@@ -95,7 +95,7 @@
 		<section class="mb-6" aria-labelledby="long-answer-heading">
 			<h2
 				id="long-answer-heading"
-				class="mb-2.5 text-2xs font-bold uppercase tracking-[0.13em] text-ink-muted"
+				class="eyebrow mb-2.5 text-ink-muted"
 			>
 				Giải thích đầy đủ
 			</h2>

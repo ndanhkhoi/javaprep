@@ -7,6 +7,7 @@
 	import StatTile from '$lib/components/ui/StatTile.svelte';
 	import TopicCard from '$lib/components/TopicCard.svelte';
 	import { questions, topics } from '$lib/data';
+	import { formatIsoDate } from '$lib/srs/date';
 	import { buildSession } from '$lib/srs/queue';
 	import { masteryByTopic, masteryOf } from '$lib/stats/mastery';
 	import { longestStreak, streak } from '$lib/stats/streak';
@@ -43,17 +44,9 @@
 		return 'Chào buổi tối';
 	});
 
-	const dateLabel = $derived.by(() => {
-		try {
-			return new Intl.DateTimeFormat('vi-VN', {
-				weekday: 'long',
-				day: 'numeric',
-				month: 'long'
-			}).format(new Date(`${progress.today}T00:00:00`));
-		} catch {
-			return progress.today;
-		}
-	});
+	/** Không kèm thứ: "CHÀO BUỔI TỐI · THỨ BẢY, 5 THÁNG 9" tràn sang dòng thứ hai ngay
+	    trên màn 375px, mà thứ thì đã có ở heatmap nhịp học. */
+	const dateLabel = $derived(formatIsoDate(progress.today));
 
 	/** Ba trạng thái của hero, mỗi trạng thái có đúng một hành động chính. */
 	const hero = $derived.by(() => {
@@ -96,9 +89,7 @@
 		<div class="flex flex-1 flex-col">
 			<div class="flex items-start justify-between gap-4 sm:gap-6">
 				<div class="min-w-0 flex-1">
-					<p class="text-2xs font-bold uppercase tracking-[0.14em] text-brand">
-						{greeting} · {dateLabel}
-					</p>
+					<p class="eyebrow text-brand">{greeting} · {dateLabel}</p>
 					<h1 id="hero-headline" class="mt-2 text-display font-extrabold">
 						{hero.headline}
 					</h1>
@@ -154,7 +145,8 @@
 			</div>
 			<a
 				href="{base}/settings"
-				class="ms-auto inline-flex items-center gap-1 font-semibold text-brand hover:underline"
+				class="-my-2 ms-auto inline-flex min-h-11 items-center gap-1 font-semibold text-brand
+				       hover:underline"
 			>
 				Đổi giới hạn
 				<Icon name="arrowRight" size={12} strokeWidth={2.2} />
@@ -189,9 +181,7 @@
 
 <section class="mt-8" aria-labelledby="topics-heading">
 	<div class="mb-2.5 flex items-baseline justify-between gap-3">
-		<h2 id="topics-heading" class="text-2xs font-bold uppercase tracking-[0.13em] text-ink-muted">
-			Chủ đề
-		</h2>
+		<h2 id="topics-heading" class="eyebrow text-ink-muted">Chủ đề</h2>
 		<p class="text-2xs tabular-nums text-ink-subtle">
 			{topics.length} chủ đề · {questions.length} câu
 		</p>

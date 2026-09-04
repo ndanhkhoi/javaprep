@@ -1,14 +1,23 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import Alert from '$lib/components/ui/Alert.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
 	import { backupFileName, parseBackup, serialiseBackup } from '$lib/backup';
 	import { progress } from '$lib/stores/progress.svelte';
-	import type { ThemePreference } from '$lib/types';
+	import type { PersistedState, ThemePreference } from '$lib/types';
 
-	let message = $state<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+	type Feedback = { tone: 'ok' | 'bad'; text: string; undo?: PersistedState };
+
+	let feedback = $state<Feedback | null>(null);
 	let fileInput = $state<HTMLInputElement | null>(null);
+	let confirmReset = $state(false);
+	let confirmImport = $state(false);
+	/** Dữ liệu đã đọc từ file, chờ người dùng xác nhận ghi đè. */
+	let pendingImport = $state<PersistedState | null>(null);
 
 	const THEMES: { value: ThemePreference; label: string }[] = [
 		{ value: 'system', label: 'Hệ thống' },
@@ -18,6 +27,9 @@
 	const LIMITS = [5, 10, 20, 30].map((n) => ({ value: n, label: String(n) }));
 
 	const cardCount = $derived(Object.keys(progress.cards).length);
+	const incomingCount = $derived(
+		pendingImport ? Object.keys(pendingImport.cards).length : 0
+	);
 
 	function exportBackup(): void {
 		const blob = new Blob([serialiseBackup(progress.snapshot())], { type: 'application/json' });
@@ -27,10 +39,10 @@
 		link.download = backupFileName(progress.today);
 		link.click();
 		URL.revokeObjectURL(url);
-		message = { tone: 'ok', text: 'Đã tải file sao lưu.' };
+		feedback = { tone: 'ok', text: 'Đã tải file sao lưu.' };
 	}
 
-	async function importBackup(event: Event): Promise<void> {
+	async function readBackupFile(event: Event): Promise<void> {
 		const input = event.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
@@ -38,61 +50,75 @@
 
 		const result = parseBackup(await file.text());
 		if (!result.ok) {
-			message = { tone: 'bad', text: result.error };
+			feedback = { tone: 'bad', text: result.error };
 			return;
 		}
 
-		const incoming = Object.keys(result.state.cards).length;
-		const confirmed = confirm(
-			`Nhập dữ liệu sẽ GHI ĐÈ toàn bộ tiến độ hiện tại (${cardCount} thẻ) bằng ${incoming} thẻ từ file. ` +
-				'Thao tác này không hoàn tác được. Tiếp tục?'
-		);
-		if (!confirmed) return;
-
-		progress.replaceAll(result.state);
-		message = { tone: 'ok', text: `Đã khôi phục ${incoming} thẻ.` };
+		pendingImport = result.state;
+		confirmImport = true;
 	}
 
-	function reset(): void {
-		if (!confirm(`Xoá toàn bộ tiến độ của ${cardCount} thẻ? Không hoàn tác được.`)) return;
-		if (!confirm('Bạn chắc chắn chứ? Nên xuất file sao lưu trước khi xoá.')) return;
+	/**
+	 * Ghi đè và xoá đều giữ lại ảnh chụp trạng thái cũ để hoàn tác được.
+	 *
+	 * Hộp xác nhận chỉ chặn được cú bấm nhầm; nó không giúp gì cho người bấm đúng rồi
+	 * mới nhận ra mình chọn sai file. Ảnh chụp nằm trong bộ nhớ nên hoàn tác chỉ sống
+	 * tới khi rời trang — vẫn đúng khoảng thời gian mà người dùng còn nhớ mình vừa làm gì.
+	 */
+	function applyImport(): void {
+		if (!pendingImport) return;
+		const previous = progress.snapshot();
+		const count = Object.keys(pendingImport.cards).length;
+		progress.replaceAll(pendingImport);
+		pendingImport = null;
+		feedback = { tone: 'ok', text: `Đã khôi phục ${count} thẻ.`, undo: previous };
+	}
+
+	function applyReset(): void {
+		const previous = progress.snapshot();
 		progress.reset();
-		message = { tone: 'ok', text: 'Đã xoá toàn bộ tiến độ học.' };
+		feedback = { tone: 'ok', text: 'Đã xoá toàn bộ tiến độ học.', undo: previous };
+	}
+
+	// Huỷ hộp xác nhận thì dữ liệu đã đọc từ file cũng phải bỏ đi, nếu không lần bấm
+	// "Nhập từ file" sau sẽ mang theo số thẻ của file cũ trong lời cảnh báo.
+	$effect(() => {
+		if (!confirmImport) pendingImport = null;
+	});
+
+	function undo(state: PersistedState): void {
+		progress.replaceAll(state);
+		feedback = { tone: 'ok', text: 'Đã hoàn tác, tiến độ trở lại như trước.' };
 	}
 </script>
 
 <svelte:head><title>Cài đặt — JavaPrep</title></svelte:head>
 
 <div class="mx-auto max-w-3xl">
-	<a
-		href="{base}/"
-		class="mb-3 inline-flex min-h-8 items-center gap-1 text-xs font-medium text-ink-muted
-		       transition-colors hover:text-ink"
-	>
-		<Icon name="chevronLeft" size={14} />
-		Chủ đề
-	</a>
+	<PageHeader title="Cài đặt" backHref="{base}/" backLabel="Chủ đề" />
 
-	<h1 class="mb-5 text-title font-extrabold">Cài đặt</h1>
-
-	{#if message}
-		<p
-			class="animate-rise mb-5 flex items-center gap-2.5 rounded-xl border p-3.5 text-sm font-medium
-			       {message.tone === 'ok'
-				? 'border-ok/40 bg-ok-soft text-ok'
-				: 'border-bad/40 bg-bad-soft text-bad'}"
-			role="status"
-			aria-live="polite"
-		>
-			<Icon name={message.tone === 'ok' ? 'check' : 'x'} size={16} strokeWidth={2.4} />
-			{message.text}
-		</p>
+	{#if feedback}
+		<div class="mb-5">
+			<Alert
+				tone={feedback.tone}
+				text={feedback.text}
+				action={feedback.undo ? 'Hoàn tác' : undefined}
+				onAction={() => {
+					const previous = feedback?.undo;
+					if (previous) undo(previous);
+				}}
+				onDismiss={() => (feedback = null)}
+			/>
+		</div>
 	{/if}
 
 	<div class="space-y-4">
 		<section class="surface-card rounded-2xl p-5" aria-labelledby="theme-heading">
 			<div class="mb-3 flex items-start gap-3">
-				<span class="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
+				<span
+					class="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand"
+					aria-hidden="true"
+				>
 					<Icon name="sun" size={17} />
 				</span>
 				<div class="min-w-0">
@@ -112,7 +138,10 @@
 
 		<section class="surface-card rounded-2xl p-5" aria-labelledby="limit-heading">
 			<div class="mb-3 flex items-start gap-3">
-				<span class="grid size-9 shrink-0 place-items-center rounded-lg bg-warn-soft text-warn">
+				<span
+					class="grid size-9 shrink-0 place-items-center rounded-lg bg-warn-soft text-warn"
+					aria-hidden="true"
+				>
 					<Icon name="layers" size={17} />
 				</span>
 				<div class="min-w-0">
@@ -133,7 +162,10 @@
 
 		<section class="surface-card rounded-2xl p-5" aria-labelledby="data-heading">
 			<div class="mb-4 flex items-start gap-3">
-				<span class="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-muted">
+				<span
+					class="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-muted"
+					aria-hidden="true"
+				>
 					<Icon name="download" size={17} />
 				</span>
 				<div class="min-w-0">
@@ -160,24 +192,22 @@
 				type="file"
 				accept="application/json,.json"
 				class="sr-only"
-				onchange={importBackup}
+				onchange={readBackupFile}
 			/>
 
 			<hr class="my-4 border-border" />
 
-			<Button variant="danger" size="lg" full onclick={reset}>
+			<Button variant="danger" size="lg" full onclick={() => (confirmReset = true)}>
 				<Icon name="trash" size={17} />
 				Xoá toàn bộ tiến độ
 			</Button>
 		</section>
 
-		<section class="rounded-2xl border border-border bg-surface-2 p-5" aria-labelledby="about-heading">
-			<h2
-				id="about-heading"
-				class="mb-2 text-2xs font-bold uppercase tracking-[0.13em] text-ink-muted"
-			>
-				Về JavaPrep
-			</h2>
+		<section
+			class="rounded-2xl border border-border bg-surface-2 p-5"
+			aria-labelledby="about-heading"
+		>
+			<h2 id="about-heading" class="eyebrow mb-2 text-ink-muted">Về JavaPrep</h2>
 			<div class="space-y-2 text-xs leading-relaxed text-ink-muted">
 				<p>
 					100 câu hỏi phỏng vấn Java &amp; Spring Boot, bám Java 21 LTS và Spring Boot 3.x. Lịch ôn
@@ -191,3 +221,21 @@
 		</section>
 	</div>
 </div>
+
+<ConfirmDialog
+	bind:open={confirmReset}
+	icon="trash"
+	title="Xoá toàn bộ tiến độ?"
+	body="Toàn bộ lịch ôn và thống kê của {cardCount} thẻ sẽ bị xoá. Tuỳ chọn giao diện được giữ lại. Bạn vẫn có thể hoàn tác ngay sau đó."
+	confirmLabel="Xoá tiến độ"
+	onConfirm={applyReset}
+/>
+
+<ConfirmDialog
+	bind:open={confirmImport}
+	icon="upload"
+	title="Ghi đè tiến độ hiện tại?"
+	body="{incomingCount} thẻ trong file sẽ thay thế {cardCount} thẻ đang có trên máy này. Bạn vẫn có thể hoàn tác ngay sau đó."
+	confirmLabel="Ghi đè"
+	onConfirm={applyImport}
+/>

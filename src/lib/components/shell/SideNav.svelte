@@ -27,7 +27,7 @@
 		</span>
 		<span class="leading-tight">
 			<strong class="block text-sm font-extrabold tracking-tight">JavaPrep</strong>
-			<span class="block text-2xs text-ink-subtle">Java &amp; Spring Boot</span>
+			<span class="block text-2xs text-ink-muted">Java &amp; Spring Boot</span>
 		</span>
 	</a>
 
@@ -48,8 +48,8 @@
 					<span class="flex-1">{item.label}</span>
 					{#if item.badge && dueCount > 0}
 						<span
-							class="min-w-5 rounded-full bg-bad-solid px-1.5 text-center text-2xs font-bold
-							       leading-5 text-white"
+							class="min-w-5 rounded-full bg-bad px-1.5 text-center text-2xs font-bold
+							       leading-5 text-bad-ink"
 						>
 							{dueCount > 99 ? '99+' : dueCount}
 							<span class="sr-only">thẻ đến hạn</span>
@@ -63,19 +63,24 @@
 	<div class="mt-auto flex flex-col gap-1 border-t border-border pt-3">
 		<a
 			href="{base}/search"
-			class="flex min-h-10 items-center gap-3 rounded-lg px-2.5 text-sm font-medium text-ink-muted
-			       transition-colors hover:bg-surface-3 hover:text-ink"
+			class="flex min-h-11 items-center gap-3 rounded-lg px-2.5 text-sm font-medium
+			       transition-colors hover:bg-surface-3 hover:text-ink
+			       {isActive('/search', page.url.pathname, base)
+				? 'bg-brand-soft text-brand'
+				: 'text-ink-muted'}"
+			aria-current={isActive('/search', page.url.pathname, base) ? 'page' : undefined}
 		>
 			<Icon name="search" size={18} />
 			Tìm kiếm
 		</a>
 		<a
 			href="{base}/settings"
-			class="flex min-h-10 items-center gap-3 rounded-lg px-2.5 text-sm font-medium
+			class="flex min-h-11 items-center gap-3 rounded-lg px-2.5 text-sm font-medium
 			       transition-colors hover:bg-surface-3 hover:text-ink
 			       {isActive('/settings', page.url.pathname, base)
 				? 'bg-brand-soft text-brand'
 				: 'text-ink-muted'}"
+			aria-current={isActive('/settings', page.url.pathname, base) ? 'page' : undefined}
 		>
 			<Icon name="settings" size={18} />
 			Cài đặt

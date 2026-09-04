@@ -17,7 +17,7 @@
 
 <button
 	type="button"
-	class="grid size-10 place-items-center rounded-lg border border-border bg-surface-2
+	class="grid size-11 place-items-center rounded-lg border border-border bg-surface-2
 	       text-ink-muted transition-colors duration-[var(--dur-fast)]
 	       hover:border-border-strong hover:text-ink"
 	title={META[current].label}

@@ -1,16 +1,28 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import Button from '$lib/components/ui/Button.svelte';
-	import FilterChip from '$lib/components/ui/FilterChip.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import RingProgress from '$lib/components/ui/RingProgress.svelte';
 	import SectionHeading from '$lib/components/ui/SectionHeading.svelte';
+	import TopicFilter from '$lib/components/TopicFilter.svelte';
 	import { questions, topics } from '$lib/data';
 	import { buildSession, countDue } from '$lib/srs/queue';
 	import { progress } from '$lib/stores/progress.svelte';
 
-	let topic = $state<string | null>(null);
+	// Phạm vi nằm trong URL: link "Ôn chủ đề này" từ trang chủ đề mở đúng phạm vi đó,
+	// và bấm back từ phiên ôn thì bộ chọn vẫn ở nguyên chỗ người dùng để lại.
+	let topic = $state<string | null>(page.url.searchParams.get('topic'));
+
+	function selectTopic(next: string | null): void {
+		topic = next;
+		const url = new URL(page.url);
+		if (next) url.searchParams.set('topic', next);
+		else url.searchParams.delete('topic');
+		replaceState(url, page.state);
+	}
 
 	const dueTotal = $derived(progress.dueCount);
 	const session = $derived(
@@ -47,18 +59,7 @@
 
 	<section class="mb-5">
 		<SectionHeading title="Phạm vi" hint={scopeLabel} />
-		<div class="flex flex-wrap gap-2">
-			<FilterChip active={topic === null} onToggle={() => (topic = null)}>Tất cả</FilterChip>
-			{#each topics as t (t.id)}
-				<FilterChip
-					active={topic === t.id}
-					onToggle={() => (topic = topic === t.id ? null : t.id)}
-				>
-					<span aria-hidden="true">{t.icon}</span>
-					{t.name}
-				</FilterChip>
-			{/each}
-		</div>
+		<TopicFilter value={topic} onSelect={selectTopic} label="Phạm vi ôn thẻ" />
 	</section>
 
 	<section
@@ -105,7 +106,7 @@
 					</div>
 					<div class="flex items-center gap-2.5">
 						<span
-							class="size-2.5 shrink-0 rounded-full bg-surface-4 ring-1 ring-border"
+							class="size-2.5 shrink-0 rounded-full bg-surface-4 ring-1 ring-border-strong"
 							aria-hidden="true"
 						></span>
 						<dt class="flex-1 text-sm text-ink-muted">Thẻ mới</dt>

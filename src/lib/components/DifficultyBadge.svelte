@@ -13,7 +13,7 @@
 <span
 	class="inline-flex shrink-0 items-center gap-1.5 rounded-full font-semibold
 	       {META[difficulty].classes}
-	       {size === 'sm' ? 'px-2 py-0.5 text-[0.625rem]' : 'px-2.5 py-1 text-2xs'}"
+	       {size === 'sm' ? 'px-2 py-0.5 text-2xs' : 'px-2.5 py-1 text-2xs'}"
 >
 	<span class="size-1.5 rounded-full {META[difficulty].dot}" aria-hidden="true"></span>
 	{META[difficulty].label}
