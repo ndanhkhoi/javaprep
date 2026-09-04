@@ -1,0 +1,85 @@
+@import 'tailwindcss';
+
+/* Dark mode điều khiển bằng class trên <html> (đặt bởi inline script + store settings),
+   không dùng media query trực tiếp — cho phép user override theme hệ thống. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+	--color-surface: oklch(99% 0.004 250);
+	--color-surface-2: oklch(96.5% 0.006 250);
+	--color-surface-3: oklch(93% 0.008 250);
+	--color-border: oklch(88% 0.01 250);
+	--color-ink: oklch(25% 0.02 255);
+	--color-ink-muted: oklch(52% 0.02 255);
+	--color-brand: oklch(52% 0.16 258);
+	--color-brand-ink: oklch(98% 0.01 258);
+	--color-ok: oklch(52% 0.14 155);
+	--color-warn: oklch(62% 0.15 70);
+	--color-bad: oklch(55% 0.19 25);
+
+	--font-sans: 'Inter var', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+.dark {
+	--color-surface: oklch(21% 0.02 258);
+	--color-surface-2: oklch(26% 0.022 258);
+	--color-surface-3: oklch(31% 0.024 258);
+	--color-border: oklch(38% 0.02 258);
+	--color-ink: oklch(95% 0.008 258);
+	--color-ink-muted: oklch(72% 0.015 258);
+	--color-brand: oklch(72% 0.14 258);
+	--color-brand-ink: oklch(20% 0.03 258);
+	--color-ok: oklch(72% 0.15 155);
+	--color-warn: oklch(78% 0.14 75);
+	--color-bad: oklch(70% 0.16 25);
+}
+
+html {
+	background-color: var(--color-surface);
+	color: var(--color-ink);
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	overflow-x: hidden;
+	overscroll-behavior-y: none;
+	font-family: var(--font-sans);
+}
+
+/* Vùng chạm tối thiểu theo WCAG 2.2 Target Size (Minimum). */
+button,
+a[role='button'],
+[role='tab'] {
+	touch-action: manipulation;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+:focus-visible {
+	outline: 2px solid var(--color-brand);
+	outline-offset: 2px;
+	border-radius: 0.25rem;
+}
+
+/* Ẩn khỏi màn hình nhưng vẫn đọc được bởi screen reader. */
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border-width: 0;
+}

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi" class="h-full">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="description" content="Ôn 100 câu hỏi phỏng vấn Java & Spring Boot theo chủ đề — flashcard, quiz, spaced repetition. Hoạt động offline." />
+		<link rel="icon" href="%sveltekit.assets%/icons/favicon.svg" type="image/svg+xml" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/icons/icon-192.png" />
+		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+		<meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<title>JavaPrep</title>
+		<script>
+			// Áp theme trước khi paint để tránh nháy màu (FOUC).
+			try {
+				const s = localStorage.getItem('javaprep:v1');
+				const t = s ? JSON.parse(s)?.settings?.theme : 'system';
+				if (t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)) {
+					document.documentElement.classList.add('dark');
+				}
+			} catch { /* localStorage bị chặn — dùng mặc định sáng */ }
+		</script>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover" class="h-full">
+		<div style="display: contents" class="h-full">%sveltekit.body%</div>
+	</body>
+</html>
