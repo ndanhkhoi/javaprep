@@ -7,6 +7,8 @@ export type Topic = {
 	id: string;
 	name: string;
 	icon: string;
+	/** Mô tả một dòng, hiện trên thẻ chủ đề ở màn hình chính. */
+	blurb: string;
 	order: number;
 };
 
